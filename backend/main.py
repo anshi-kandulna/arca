@@ -60,6 +60,9 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
         
         db = database.SessionLocal()
         try:
+            if not os.path.exists(output_json_path):
+                raise Exception(f"AI Pipeline failed to produce output json at {output_json_path}. Check extraction agent logs.")
+                
             with open(output_json_path, "r") as f:
                 data = json.load(f)
             
