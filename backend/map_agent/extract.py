@@ -125,7 +125,6 @@ def overlapAndExtraction(pages):
     "maps": [
         {{
         "action": "what the bank must do",
-        "department_raw": "IT or Operations or Legal or Risk or Treasury or Board",
         "deadline_raw": "exact deadline or null",
         "clause_ref": "paragraph reference or clause reference or null",
         "priority": "HIGH or MEDIUM or LOW"
@@ -224,7 +223,9 @@ def addMetadata(metadata, all_maps, pages, failed_pages):
     page_summary=defaultdict(int)
 
     for m in all_maps:
-        department_summary[m["department_raw"]]+=1
+        # Default department to Unassigned; the routing agent will run later to assign it
+        m["department"] = "Unassigned"
+        department_summary[m["department"]]+=1
         priority_summary[m["priority"]]+=1
         page_summary[m["page_no"]]+=1
 
