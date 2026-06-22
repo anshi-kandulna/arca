@@ -8,40 +8,40 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface Circular {
   id: string;
-  ref_number: string;
+  refNumber: string;
   title: string;
   category: string;
-  published_date: string;
-  created_at: string;
-  total_obligations: number;
-  completed_obligations: number;
+  publishedDate: string;
+  detectedDate: string;
+  totalObligations: number;
+  completedObligations: number;
   status: string;
   priority: string;
 }
 
 const statusConfig: Record<string, { label: string, bg: string, text: string, icon: any }> = {
   processing: { label: 'Processing', bg: 'bg-black text-white', text: 'text-white', icon: Clock },
-  detected: { label: 'Detected', bg: 'bg-info-muted', text: 'text-info', icon: Clock },
-  pending_review: { label: 'Pending Review', bg: 'bg-warning-muted', text: 'text-warning', icon: Clock },
-  in_progress: { label: 'In Progress', bg: 'bg-primary text-white', text: 'text-white', icon: AlertTriangle },
-  completed: { label: 'Completed', bg: 'bg-success-muted', text: 'text-success', icon: CheckCircle },
-  overdue: { label: 'Overdue', bg: 'bg-danger-muted', text: 'text-danger', icon: AlertTriangle },
+  detected: { label: 'Detected', bg: 'bg-info-muted', text: 'text-black', icon: Clock },
+  pending_review: { label: 'Pending Review', bg: 'bg-warning-muted', text: 'text-black', icon: Clock },
+  in_progress: { label: 'In Progress', bg: 'bg-primary text-black', text: 'text-black', icon: AlertTriangle },
+  completed: { label: 'Completed', bg: 'bg-success-muted', text: 'text-black', icon: CheckCircle },
+  overdue: { label: 'Overdue', bg: 'bg-danger-muted', text: 'text-black', icon: AlertTriangle },
   default: { label: 'Unknown', bg: 'bg-white', text: 'text-black', icon: FileText }
 };
 
 const priorityClasses: Record<string, string> = {
-  HIGH: 'bg-danger text-white border-black',
-  MEDIUM: 'bg-warning text-white border-black',
-  LOW: 'bg-success text-white border-black',
+  HIGH: 'bg-danger text-black border-black',
+  MEDIUM: 'bg-warning text-black border-black',
+  LOW: 'bg-success text-black border-black',
 };
 
 const categoryColors: Record<string, string> = {
   'FEMA': 'bg-[#EBEBE9] text-black border-black',
   'KYC/AML': 'bg-black text-white border-black',
-  'Prudential': 'bg-primary text-white border-black',
-  'Payments': 'bg-info text-white border-black',
+  'Prudential': 'bg-primary text-black border-black',
+  'Payments': 'bg-info text-black border-black',
   'Regulatory': 'bg-white text-black border-black',
-  'Risk Management': 'bg-danger text-white border-black',
+  'Risk Management': 'bg-danger text-black border-black',
 };
 
 export default function CircularsPage() {
@@ -73,7 +73,7 @@ export default function CircularsPage() {
 
   const filtered = circularsData.filter((c) => {
     const matchSearch =
-      (c.ref_number || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.refNumber || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.title || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.category || '').toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'all' || c.status === filterStatus;
@@ -158,8 +158,8 @@ export default function CircularsPage() {
             filtered.map((circular, idx) => {
               const sc = statusConfig[circular.status] || statusConfig.default;
               const StatusIcon = sc.icon;
-              const total = circular.total_obligations || 0;
-              const completed = circular.completed_obligations || 0;
+              const total = circular.totalObligations || 0;
+              const completed = circular.completedObligations || 0;
               const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
               const canReviewMAP = circular.status === 'pending_review' || circular.status === 'detected' || circular.status === 'in_progress';
               const pClass = priorityClasses[circular.priority || 'MEDIUM'];
@@ -177,7 +177,7 @@ export default function CircularsPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-3 flex-wrap mb-3">
-                        <span className="text-2xl font-serif font-bold text-black tracking-tight">{circular.ref_number}</span>
+                        <span className="text-2xl font-serif font-bold text-black tracking-tight">{circular.refNumber}</span>
                         <span className={`px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border ${cClass}`}>
                           {circular.category || 'Regulatory'}
                         </span>
@@ -190,12 +190,12 @@ export default function CircularsPage() {
                       <div className="flex items-center gap-6">
                         <div>
                           <p className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-widest mb-1">Published</p>
-                          <p className="text-xs font-mono font-bold text-black">{circular.published_date ? new Date(circular.published_date).toLocaleDateString() : 'N/A'}</p>
+                          <p className="text-xs font-mono font-bold text-black">{circular.publishedDate && circular.publishedDate !== "None" ? new Date(circular.publishedDate).toLocaleDateString() : 'N/A'}</p>
                         </div>
                         <div className="w-px h-6 bg-black/20" />
                         <div>
                           <p className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-widest mb-1">Detected</p>
-                          <p className="text-xs font-mono font-bold text-black">{circular.created_at ? new Date(circular.created_at).toLocaleDateString() : 'N/A'}</p>
+                          <p className="text-xs font-mono font-bold text-black">{circular.detectedDate && circular.detectedDate !== "None" ? new Date(circular.detectedDate).toLocaleDateString() : 'N/A'}</p>
                         </div>
                       </div>
                     </div>
@@ -223,13 +223,13 @@ export default function CircularsPage() {
                     {canReviewMAP ? (
                       <button
                         onClick={() => navigate(`/map-review-screen?circular=${circular.id}`)}
-                        className="w-full flex items-center justify-between px-6 py-4 bg-black hover:bg-primary text-white font-mono font-bold text-xs transition-colors uppercase tracking-widest border-t border-black"
+                        className="w-full flex items-center justify-between px-6 py-4 bg-black hover:bg-white text-white hover:text-black font-mono font-bold text-xs transition-colors uppercase tracking-widest border-t border-black"
                       >
                         <span>Review MAPs</span>
                         <ArrowUpRight size={16} />
                       </button>
                     ) : (
-                      <div className="w-full flex items-center justify-between px-6 py-4 bg-success text-white font-mono font-bold text-xs uppercase tracking-widest border-t border-black">
+                      <div className="w-full flex items-center justify-between px-6 py-4 bg-success-muted text-success font-mono font-bold text-xs uppercase tracking-widest border-t border-black">
                         <span>All Processed</span>
                         <CheckCircle size={16} />
                       </div>

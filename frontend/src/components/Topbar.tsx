@@ -99,7 +99,9 @@ export default function Topbar({ onMobileMenuOpen }: TopbarProps) {
             >
               <Bell size={20} />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-danger border border-black rounded-none"></span>
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-4 px-1 bg-white text-black text-[10px] font-mono font-bold border border-black rounded-none shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                  {unreadCount}
+                </span>
               )}
             </button>
 
@@ -137,15 +139,6 @@ export default function Topbar({ onMobileMenuOpen }: TopbarProps) {
             )}
           </div>
         )}
-
-        {/* User */}
-        <button className="flex items-center gap-3 pl-2 pr-2 py-1.5 bg-white border-2 border-transparent hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all group">
-          <div className="w-8 h-8 bg-black flex items-center justify-center">
-            <span className="text-xs font-mono font-bold text-white">{user?.full_name ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}</span>
-          </div>
-          <span className="hidden sm:block text-xs font-serif font-bold text-black">{user?.full_name ?? 'User'}</span>
-          <ChevronDown size={14} className="text-black group-hover:translate-y-[2px] transition-transform" />
-        </button>
       </div>
     </header>
   );

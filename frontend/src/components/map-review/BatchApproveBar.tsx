@@ -5,15 +5,14 @@ import { Send, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 
 interface Props {
   approvedCount: number;
-  totalCount: number;
+  pendingCount: number;
   rejectedCount: number;
   dispatching: boolean;
   onDispatch: () => void;
   onApproveAll: () => void;
 }
 
-export default function BatchApproveBar({ approvedCount, totalCount, rejectedCount, dispatching, onDispatch, onApproveAll }: Props) {
-  const pendingCount = totalCount - approvedCount - rejectedCount;
+export default function BatchApproveBar({ approvedCount, pendingCount, rejectedCount, dispatching, onDispatch, onApproveAll }: Props) {
   const canDispatch = approvedCount > 0;
 
   return (

@@ -171,10 +171,10 @@ function SidebarContent({
 
   const initials = user?.full_name ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U';
   const displayName = user?.full_name ?? 'User';
-  const displayTitle = userRole === 'compliance_officer' ? 'Compliance Officer' 
+  const displayTitle = userRole === 'compliance_officer' ? 'Compliance Officer'
     : userRole === 'department_user' ? 'Department User'
-    : userRole === 'department_head' ? 'Department Head' 
-    : 'User';
+      : userRole === 'department_head' ? 'Department Head'
+        : 'User';
 
   return (
     <div className="flex flex-col h-full bg-[#fbfbfa]">
@@ -182,7 +182,7 @@ function SidebarContent({
       <div className={`flex items-center h-16 border-b-2 border-black px-4 ${collapsed ? 'justify-center' : 'justify-between'}`}>
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <AppLogo size={24} />
+            <AppLogo size={36} />
             <span className="font-serif font-bold text-xl tracking-tighter text-black">
               ARCA
             </span>
@@ -256,7 +256,9 @@ function SidebarContent({
           <div className="space-y-3">
             <div className="flex items-center gap-3 px-2 py-2 border-2 border-transparent hover:border-black transition-colors cursor-pointer group">
               <div className="w-10 h-10 bg-primary flex items-center justify-center flex-shrink-0 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-[1px] group-hover:translate-y-[1px] group-hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] transition-all">
-                <span className="text-xs font-mono font-bold text-white">{initials}</span>
+                <span className="text-xs font-mono font-bold text-black">
+                  {user?.full_name ? user.full_name.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().substring(0, 3) || 'U' : 'U'}
+                </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-serif font-bold text-black truncate">{displayName}</p>
@@ -274,7 +276,9 @@ function SidebarContent({
         ) : (
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 bg-primary flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              <span className="text-xs font-mono font-bold text-white">{initials}</span>
+              <span className="text-xs font-mono font-bold text-black">
+                {user?.full_name ? user.full_name.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().substring(0, 3) || 'U' : 'U'}
+              </span>
             </div>
             <button
               onClick={handleSignOut}

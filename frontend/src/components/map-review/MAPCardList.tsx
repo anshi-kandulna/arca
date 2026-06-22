@@ -12,9 +12,10 @@ interface Props {
   approvedCount: number;
   rejectedCount: number;
   pendingCount: number;
+  dispatchedCount: number;
 }
 
-export default function MAPCardList({ maps, onUpdateMap, onApproveAll, approvedCount, rejectedCount, pendingCount }: Props) {
+export default function MAPCardList({ maps, onUpdateMap, onApproveAll, approvedCount, rejectedCount, pendingCount, dispatchedCount }: Props) {
   return (
     <div className="space-y-4">
       {/* Status Summary */}
@@ -31,6 +32,10 @@ export default function MAPCardList({ maps, onUpdateMap, onApproveAll, approvedC
           <div className="flex items-center gap-1.5">
             <XCircle size={13} className="text-danger" />
             <span className="text-xs text-muted-foreground font-mono-data">{rejectedCount} rejected</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <CheckCircle size={13} className="text-muted-foreground" />
+            <span className="text-xs text-muted-foreground font-mono-data">{dispatchedCount} dispatched</span>
           </div>
         </div>
         {pendingCount > 0 && (

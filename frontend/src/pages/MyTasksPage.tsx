@@ -16,15 +16,15 @@ const statusConfig: any = {
   under_review: { label: 'Under Review', bg: 'bg-info-muted', border: 'border-info', text: 'text-info', icon: Send },
   completed: { label: 'Completed', bg: 'bg-success-muted', border: 'border-success', text: 'text-success', icon: CheckCircle },
   closed: { label: 'Closed', bg: 'bg-black', border: 'border-black', text: 'text-white', icon: CheckCircle },
-  rework_required: { label: 'Rejected — Resubmit', bg: 'bg-danger-muted', border: 'border-danger', text: 'text-danger', icon: AlertTriangle },
-  overdue: { label: 'Overdue', bg: 'bg-danger text-white', border: 'border-danger', text: 'text-white', icon: AlertTriangle },
+  rework_required: { label: 'Rejected — Resubmit', bg: 'bg-danger-muted', border: 'border-danger', text: 'text-black', icon: AlertTriangle },
+  overdue: { label: 'Overdue', bg: 'bg-danger text-black', border: 'border-danger', text: 'text-black', icon: AlertTriangle },
 };
 
 const priorityClasses: any = {
-  HIGH: 'bg-danger-muted text-danger border-danger',
-  MEDIUM: 'bg-warning-muted text-warning border-warning',
-  LOW: 'bg-success-muted text-success border-success',
-  CRITICAL: 'bg-danger text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+  HIGH: 'bg-danger-muted text-black border-danger',
+  MEDIUM: 'bg-warning-muted text-black border-warning',
+  LOW: 'bg-success-muted text-black border-success',
+  CRITICAL: 'bg-danger text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
 };
 
 function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSubmitted: () => void }) {
@@ -73,7 +73,7 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap mb-2">
-              <span className="font-mono text-sm font-bold bg-primary text-white px-2 py-0.5 border border-black">{task.mapId}</span>
+              <span className="font-mono text-sm font-bold bg-primary text-black px-2 py-0.5 border border-black">{task.mapId}</span>
               <span className={`px-2 py-0.5 border text-[10px] font-mono font-bold uppercase tracking-widest border-black ${priorityClasses[task.priority] || priorityClasses['MEDIUM']}`}>{task.priority}</span>
               <span className={`px-2 py-0.5 border text-[10px] font-mono font-bold uppercase tracking-widest border-black ${sc.bg} ${sc.text}`}>{sc.label}</span>
             </div>
@@ -128,7 +128,7 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
                   <button
                     onClick={handleSubmit}
                     disabled={uploading}
-                    className="flex items-center justify-center gap-2 px-8 py-3 bg-primary text-white font-mono text-sm font-bold uppercase tracking-widest border border-black hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="flex items-center justify-center gap-2 px-8 py-3 bg-black text-white hover:bg-white hover:text-black font-mono text-sm font-bold uppercase tracking-widest border border-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   >
                     {uploading ? 'UPLOADING...' : 'SUBMIT EVIDENCE'}
                   </button>

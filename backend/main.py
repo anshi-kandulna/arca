@@ -63,13 +63,19 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
             if not os.path.exists(output_json_path):
                 raise Exception(f"AI Pipeline failed to produce output json at {output_json_path}. Check extraction agent logs.")
                 
-            with open(output_json_path, "r") as f:
+            with open(output_json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
             circular = crud.get_circular(db, circular_id)
             if circular:
-                circular.ref_number = data.get("circular_id", circular.ref_number)
-                circular.title = data.get("circular_title", circular.title)
+                extracted_ref = data.get("circular_id")
+                if extracted_ref:
+                    circular.ref_number = extracted_ref
+                    
+                extracted_title = data.get("circular_title")
+                if extracted_title:
+                    circular.title = extracted_title
+                    
                 if data.get("circular_date"):
                     try:
                         circular.published_date = datetime.strptime(data["circular_date"], "%Y-%m-%d").date()
@@ -99,9 +105,10 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
                     })
                     
                     if map_item["department"] and map_item["department"] != "Unassigned":
-                        crud.create_notification(db, bank_id=str(bank_id), business_vertical=map_item["department"], message=f"New obligation assigned from circular {circular.ref_number}: {map_item['action'][:80]}...")
+                        # We no longer create notifications here. Notifications are deferred until manual dispatch.
+                        pass
                 
-                crud.update_circular(db, circular, {"status": "detected"})
+                crud.update_circular(db, circular, {"status": "pending_review"})
         finally:
             db.close()
     except Exception as e:
@@ -138,6 +145,18 @@ async def upload_circular(
             ref_number=f"UPL-{uuid.uuid4().hex[:6]}",
             title=file.filename,
             file_path=file.filename
+        )
+        
+        # Audit Log
+        crud.create_audit_log(
+            db=db,
+            bank_id=str(current_user.bank_id),
+            actor=current_user.full_name or current_user.email,
+            actor_role=current_user.role,
+            action="Circular Uploaded",
+            action_type="CIRCULAR_UPLOADED",
+            circular_ref=circular.ref_number,
+            details=f"Circular '{file.filename}' uploaded and queued for processing."
         )
         
         output_json_path = os.path.join(uploads_dir, f"{circular.id}_output.json")
@@ -230,21 +249,68 @@ def get_circulars(
     db: Session = Depends(database.get_db)
 ):
     circulars = crud.get_circulars_by_bank(db, current_user.bank_id)
-    return [
-        {
+    result = []
+    for c in circulars:
+        maps = crud.get_maps_by_bank(db, current_user.bank_id, str(c.id))
+        total = len(maps)
+        # Any map that has moved past the draft/rejected stage is considered "completed" from the Compliance Officer's initial review perspective, 
+        # or we consider it completed when it's fully closed. But since the progress bar is out of "total MAPs" dispatched or processed,
+        # let's count anything that is not draft, pending, or rejected.
+        completed = len([m for m in maps if m.status not in ["draft", "pending", "rejected"]])
+        
+        result.append({
             "id": str(c.id),
             "refNumber": c.ref_number,
             "title": c.title,
             "category": c.category or "General",
             "publishedDate": str(c.published_date),
             "detectedDate": str(c.created_at),
-            "totalObligations": c.total_obligations,
-            "completedObligations": c.completed_obligations,
+            "totalObligations": total if total > 0 else c.total_obligations,
+            "completedObligations": completed,
             "status": c.status if c.status in ['pending_review', 'in_progress', 'completed', 'overdue'] else 'pending_review',
             "arcaConfidence": 95, # Mock confidence
             "priority": c.priority
-        } for c in circulars
-    ]
+        })
+    return result
+
+@app.post("/api/circulars/{circular_id}/dispatch")
+def dispatch_circular(
+    circular_id: str,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    if current_user.role not in ["compliance_officer", "system_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to dispatch")
+        
+    circular = crud.get_circular(db, circular_id)
+    if not circular:
+        raise HTTPException(status_code=404, detail="Circular not found")
+        
+    crud.update_circular(db, circular, {"status": "in_progress"})
+    
+    maps = crud.get_maps_by_bank(db, current_user.bank_id, circular_id)
+    approved_maps = [m for m in maps if m.status == "approved"]
+    
+    for m in approved_maps:
+        crud.update_map(db, m, {"status": "pending_evidence"})
+        if m.business_vertical and m.business_vertical != "Unassigned":
+            # Using full obligation text without the [:80] truncation
+            msg = f"New obligation assigned from circular {circular.ref_number}: {m.obligation_text}"
+            crud.create_notification(db, bank_id=str(current_user.bank_id), business_vertical=m.business_vertical, message=msg)
+            
+    # Audit Log
+    crud.create_audit_log(
+        db=db,
+        bank_id=str(current_user.bank_id),
+        actor=current_user.full_name or current_user.email,
+        actor_role=current_user.role,
+        action="MAPs Dispatched",
+        action_type="MAPS_DISPATCHED",
+        circular_ref=circular.ref_number,
+        details=f"Dispatched {len(approved_maps)} approved MAPs to departments."
+    )
+            
+    return {"message": f"Dispatched {len(approved_maps)} MAPs successfully"}
 
 @app.get("/api/maps")
 def get_maps(
@@ -316,6 +382,21 @@ def upload_evidence(
     
     # Update map status
     crud.update_map(db, db_map, {"status": "under_review"})
+    
+    # Audit Log
+    circular = crud.get_circular(db, db_map.circular_id)
+    crud.create_audit_log(
+        db=db,
+        bank_id=str(current_user.bank_id),
+        actor=current_user.full_name or current_user.email,
+        actor_role=current_user.role,
+        action="Evidence Submitted",
+        action_type="EVIDENCE_SUBMITTED",
+        circular_ref=circular.ref_number if circular else None,
+        map_ref=db_map.map_id,
+        business_vertical=db_map.business_vertical,
+        details=f"Evidence '{evidence.file_name}' submitted for MAP."
+    )
     
     # The actual Validation Agent processing will be integrated here later.
 

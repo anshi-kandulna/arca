@@ -87,6 +87,7 @@ export default function MAPReviewContent() {
   const approvedCount = currentMaps.filter((m) => m.status === 'approved').length;
   const rejectedCount = currentMaps.filter((m) => m.status === 'rejected').length;
   const pendingCount = currentMaps.filter((m) => m.status === 'pending' || m.status === 'edited').length;
+  const dispatchedCount = currentMaps.filter((m) => !['pending', 'approved', 'rejected', 'edited', 'draft'].includes(m.status)).length;
 
   async function updateMap(mapId: string, updates: Partial<MAP>) {
     setMaps((prev) => ({
@@ -119,14 +120,31 @@ export default function MAPReviewContent() {
     }
   }
 
-  function handleApproveAll() {
+  async function handleApproveAll() {
+    const mapsToApprove = maps[selectedCircularId]?.filter((m) => m.status === 'pending' || m.status === 'edited') || [];
+    if (mapsToApprove.length === 0) return;
+    
+    // Optimistically update UI
     setMaps((prev) => ({
       ...prev,
       [selectedCircularId]: prev[selectedCircularId].map((m) =>
-        m.status !== 'rejected' ? { ...m, status: 'approved' } : m
+        (m.status === 'pending' || m.status === 'edited') ? { ...m, status: 'approved' } : m
       ),
     }));
-    toast.success(`${pendingCount + approvedCount} MAPs approved`);
+    
+    // Call backend for each
+    await Promise.all(mapsToApprove.map(m => 
+      fetch(`http://localhost:8000/api/maps/${m.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: 'approved' })
+      }).catch(err => console.error("Failed to approve map", m.id, err))
+    ));
+    
+    toast.success(`${mapsToApprove.length} MAPs approved`);
   }
 
   async function handleDispatch() {
@@ -135,12 +153,42 @@ export default function MAPReviewContent() {
       return;
     }
     setDispatching(true);
-    // Backend integration point: POST /api/circulars/{circularId}/dispatch-maps
-    await new Promise((r) => setTimeout(r, 1800));
-    setDispatching(false);
-    toast.success(`${approvedCount} MAPs dispatched to departments — Gate 1 complete`, {
-      description: `Circular ${circular.refNumber} · Reminders scheduled automatically`,
-    });
+    try {
+      const res = await fetch(`http://localhost:8000/api/circulars/${selectedCircularId}/dispatch`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error('Dispatch failed');
+      }
+      
+      toast.success(`${approvedCount} MAPs dispatched to departments — Gate 1 complete`, {
+        description: `Circular ${circular.refNumber} · Reminders scheduled automatically`,
+      });
+      
+      // Remove circular from the view since it's no longer pending_review
+      const newCircularData = { ...circularData };
+      delete newCircularData[selectedCircularId];
+      setCircularData(newCircularData);
+      
+      const newMaps = { ...maps };
+      delete newMaps[selectedCircularId];
+      setMaps(newMaps);
+      
+      const remainingCircs = Object.values(newCircularData);
+      if (remainingCircs.length > 0) {
+        setSelectedCircularId(remainingCircs[0].id);
+      } else {
+        setSelectedCircularId('');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to dispatch MAPs');
+    } finally {
+      setDispatching(false);
+    }
   }
 
   const circularsForSelector = Object.values(circularData).map((c) => ({
@@ -197,12 +245,13 @@ export default function MAPReviewContent() {
         approvedCount={approvedCount}
         rejectedCount={rejectedCount}
         pendingCount={pendingCount}
+        dispatchedCount={dispatchedCount}
       />
 
       {/* Batch Approve Bar */}
       <BatchApproveBar
         approvedCount={approvedCount}
-        totalCount={currentMaps.length}
+        pendingCount={pendingCount}
         rejectedCount={rejectedCount}
         dispatching={dispatching}
         onDispatch={handleDispatch}

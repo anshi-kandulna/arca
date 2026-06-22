@@ -24,6 +24,7 @@ const statusConfig: Record<string, { label: string; bg: string; border: string; 
   approved: { label: 'Approved', bg: 'bg-success/10', border: 'border-success/20', text: 'text-success' },
   rejected: { label: 'Rejected', bg: 'bg-danger/10', border: 'border-danger/20', text: 'text-danger' },
   edited: { label: 'Edited — Pending', bg: 'bg-primary/10', border: 'border-primary/20', text: 'text-primary' },
+  dispatched: { label: 'Dispatched', bg: 'bg-muted/20', border: 'border-muted', text: 'text-muted-foreground' },
 };
 
 export default function MAPCard({ map, index, onUpdate }: Props) {
@@ -38,7 +39,9 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
     notes: map.notes,
   });
 
-  const sc = statusConfig[map.status] || statusConfig.pending;
+  const isDispatched = !['pending', 'approved', 'rejected', 'edited', 'draft'].includes(map.status);
+  const displayStatus = isDispatched ? 'dispatched' : map.status;
+  const sc = statusConfig[displayStatus] || statusConfig.pending;
   const confidenceColor =
     map.confidenceScore >= 90 ? 'text-success' : map.confidenceScore >= 80 ? 'text-primary' : 'text-warning';
 
@@ -59,7 +62,8 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
     setEditing(false);
   }
 
-  const cardBorder = map.status === 'approved' ?'border-success/30'
+  const cardBorder = isDispatched ? 'border-muted/50 opacity-70'
+    : map.status === 'approved' ?'border-success/30'
     : map.status === 'rejected' ?'border-danger/20 opacity-60'
     : map.status === 'edited' ?'border-primary/30' :'border-border';
 
@@ -84,7 +88,7 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {/* Edit */}
-          {map.status !== 'rejected' && !editing && (
+          {map.status !== 'rejected' && !isDispatched && !editing && (
             <button
               onClick={() => setEditing(true)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
@@ -95,7 +99,7 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
           )}
 
           {/* Approve */}
-          {map.status !== 'approved' && map.status !== 'rejected' && (
+          {map.status !== 'approved' && map.status !== 'rejected' && !isDispatched && (
             <button
               onClick={() => onUpdate({ status: 'approved' })}
               className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-success/10 border border-success/25 text-success text-xs font-medium hover:bg-success/20 transition-all duration-150 active:scale-95"
@@ -106,7 +110,7 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
           )}
 
           {/* Reject */}
-          {map.status !== 'rejected' && (
+          {map.status !== 'rejected' && !isDispatched && (
             <button
               onClick={() => onUpdate({ status: 'rejected' })}
               className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-danger/10 border border-danger/25 text-danger text-xs font-medium hover:bg-danger/20 transition-all duration-150 active:scale-95"
@@ -117,7 +121,7 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
           )}
 
           {/* Undo reject */}
-          {map.status === 'rejected' && (
+          {map.status === 'rejected' && !isDispatched && (
             <button
               onClick={() => onUpdate({ status: 'pending' })}
               className="px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground text-xs font-medium hover:text-foreground transition-colors"
@@ -127,7 +131,7 @@ export default function MAPCard({ map, index, onUpdate }: Props) {
           )}
 
           {/* Undo approve */}
-          {map.status === 'approved' && (
+          {map.status === 'approved' && !isDispatched && (
             <button
               onClick={() => onUpdate({ status: 'pending' })}
               className="px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground text-xs font-medium hover:text-foreground transition-colors"
