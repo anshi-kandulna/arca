@@ -15,8 +15,8 @@ class Bank(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
-class Department(Base):
-    __tablename__ = "departments"
+class BusinessVertical(Base):
+    __tablename__ = "business_verticals"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bank_id = Column(UUID(as_uuid=True), ForeignKey("banks.id"))
     name = Column(String, nullable=False)
@@ -28,7 +28,7 @@ class User(Base):
     email = Column(String, nullable=False, unique=True)
     full_name = Column(String, nullable=False)
     role = Column(String, nullable=False)
-    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"))
+    business_vertical_id = Column(UUID(as_uuid=True), ForeignKey("business_verticals.id"))
     title = Column(String)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -49,7 +49,8 @@ class Circular(Base):
     failed_pages = Column(JSONB)
     failed_page_count = Column(Integer)
     page_summary = Column(JSONB)
-    department_summary = Column(JSONB)
+    vertical_summary = Column(JSONB)
+    sub_vertical_summary = Column(JSONB)
     priority_summary = Column(JSONB)
     total_obligations = Column(Integer, default=0)
     completed_obligations = Column(Integer, default=0)
@@ -65,7 +66,9 @@ class Map(Base):
     bank_id = Column(UUID(as_uuid=True), ForeignKey("banks.id"))
     map_ref = Column(String, nullable=False)
     obligation_text = Column(String, nullable=False)
-    department_raw = Column(String)
+    business_vertical = Column(String)
+    sub_vertical = Column(String)
+    routing_confidence = Column(Integer)
     deadline_raw = Column(String)
     clause_ref = Column(String)
     page_no = Column(Integer)
@@ -95,4 +98,27 @@ class ValidationVerdict(Base):
     confidence = Column(Integer)
     reasoning = Column(String)
     missing_elements = Column(JSONB)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bank_id = Column(UUID(as_uuid=True), ForeignKey("banks.id"))
+    actor = Column(String, nullable=False)
+    actor_role = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    action_type = Column(String, nullable=False)
+    circular_ref = Column(String)
+    map_ref = Column(String)
+    business_vertical = Column(String)
+    details = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bank_id = Column(UUID(as_uuid=True), ForeignKey("banks.id"))
+    business_vertical = Column(String)
+    message = Column(String, nullable=False)
+    is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

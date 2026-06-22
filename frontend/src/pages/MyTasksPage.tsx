@@ -10,20 +10,21 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
 const statusConfig: any = {
-  draft: { label: 'Pending', bg: 'bg-warning/10', border: 'border-warning/25', text: 'text-warning', icon: Clock },
-  pending_evidence: { label: 'Pending Evidence', bg: 'bg-warning/10', border: 'border-warning/25', text: 'text-warning', icon: Clock },
-  in_progress: { label: 'In Progress', bg: 'bg-info/10', border: 'border-info/25', text: 'text-info', icon: Send },
-  under_review: { label: 'Under Review', bg: 'bg-info/10', border: 'border-info/25', text: 'text-info', icon: Send },
-  completed: { label: 'Completed', bg: 'bg-success/10', border: 'border-success/25', text: 'text-success', icon: CheckCircle },
-  closed: { label: 'Closed', bg: 'bg-success/10', border: 'border-success/25', text: 'text-success', icon: CheckCircle },
-  rework_required: { label: 'Rejected — Resubmit', bg: 'bg-danger/10', border: 'border-danger/25', text: 'text-danger', icon: AlertTriangle },
-  overdue: { label: 'Overdue', bg: 'bg-danger/10', border: 'border-danger/25', text: 'text-danger', icon: AlertTriangle },
+  draft: { label: 'Pending', bg: 'bg-[#fbfbfa]', border: 'border-black', text: 'text-black', icon: Clock },
+  pending_evidence: { label: 'Pending Evidence', bg: 'bg-warning-muted', border: 'border-warning', text: 'text-warning', icon: Clock },
+  in_progress: { label: 'In Progress', bg: 'bg-info-muted', border: 'border-info', text: 'text-info', icon: Send },
+  under_review: { label: 'Under Review', bg: 'bg-info-muted', border: 'border-info', text: 'text-info', icon: Send },
+  completed: { label: 'Completed', bg: 'bg-success-muted', border: 'border-success', text: 'text-success', icon: CheckCircle },
+  closed: { label: 'Closed', bg: 'bg-black', border: 'border-black', text: 'text-white', icon: CheckCircle },
+  rework_required: { label: 'Rejected — Resubmit', bg: 'bg-danger-muted', border: 'border-danger', text: 'text-danger', icon: AlertTriangle },
+  overdue: { label: 'Overdue', bg: 'bg-danger text-white', border: 'border-danger', text: 'text-white', icon: AlertTriangle },
 };
 
 const priorityClasses: any = {
-  HIGH: 'bg-danger/10 text-danger border-danger/25',
-  MEDIUM: 'bg-warning/10 text-warning border-warning/25',
-  LOW: 'bg-success/10 text-success border-success/25',
+  HIGH: 'bg-danger-muted text-danger border-danger',
+  MEDIUM: 'bg-warning-muted text-warning border-warning',
+  LOW: 'bg-success-muted text-success border-success',
+  CRITICAL: 'bg-danger text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
 };
 
 function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSubmitted: () => void }) {
@@ -63,55 +64,51 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
   };
 
   return (
-    <div className={`card-elevated border transition-all duration-200 ${task.status === 'rework_required' ? 'border-danger/30' : 'border-border'}`}>
-      <div className="px-5 py-4">
-        <div className="flex items-start gap-4">
-          <div className={`w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5 ${sc.bg} border ${sc.border}`}>
-            <StatusIcon size={15} className={sc.text} />
+    <div className={`card-elevated border-2 transition-all duration-200 bg-white ${task.status === 'rework_required' ? 'border-danger shadow-[4px_4px_0px_0px_rgba(220,38,38,1)]' : 'border-black'}`}>
+      <div className="px-6 py-5">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className={`w-12 h-12 flex items-center justify-center border-2 border-black flex-shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${sc.bg} ${sc.text}`}>
+            <StatusIcon size={20} />
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="font-mono-data text-xs font-bold text-primary">{task.mapId}</span>
-              <span className={`gate-badge border text-2xs ${priorityClasses[task.priority] || priorityClasses['MEDIUM']}`}>{task.priority}</span>
+            <div className="flex items-center gap-3 flex-wrap mb-2">
+              <span className="font-mono text-sm font-bold bg-primary text-white px-2 py-0.5 border border-black">{task.mapId}</span>
+              <span className={`px-2 py-0.5 border text-[10px] font-mono font-bold uppercase tracking-widest border-black ${priorityClasses[task.priority] || priorityClasses['MEDIUM']}`}>{task.priority}</span>
+              <span className={`px-2 py-0.5 border text-[10px] font-mono font-bold uppercase tracking-widest border-black ${sc.bg} ${sc.text}`}>{sc.label}</span>
             </div>
-            <p className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">{task.action}</p>
-            <p className="text-2xs text-muted-foreground line-clamp-1 mb-2">{task.department}</p>
-
+            <p className="text-lg font-serif text-black leading-snug mb-2">{task.action}</p>
             <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-2xs text-muted-foreground font-mono-data">Deadline: {task.deadline || 'None'}</span>
+              <span className="text-xs font-mono font-bold bg-[#fbfbfa] px-2 py-1 border border-black text-black">DEPT: {task.department}</span>
+              <span className="text-xs font-mono font-bold bg-white px-2 py-1 border border-black text-black/60">DUE: {task.deadline || 'None'}</span>
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <span className={`gate-badge border text-2xs ${sc.bg} ${sc.text} ${sc.border} flex items-center gap-1`}>
-              <StatusIcon size={10} />
-              {sc.label}
-            </span>
+          <div className="flex flex-col items-end gap-3 flex-shrink-0 mt-4 sm:mt-0">
             <button
               onClick={() => setExpanded(!expanded)}
-              className="flex items-center gap-1 text-2xs text-muted-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-2 px-4 py-2 border border-black bg-[#fbfbfa] text-xs font-mono font-bold text-black uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
             >
-              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {expanded ? 'Collapse' : 'View details'}
+              {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {expanded ? 'Close' : 'Expand'}
             </button>
           </div>
         </div>
 
         {expanded && (
-          <div className="mt-4 pt-4 border-t border-border space-y-4">
-            <div>
-              <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Full Obligation</p>
-              <p className="text-sm text-foreground leading-relaxed">{task.action}</p>
+          <div className="mt-6 pt-6 border-t-2 border-black border-dashed space-y-6">
+            <div className="bg-[#fbfbfa] p-4 border border-black border-l-4 border-l-primary">
+              <p className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-[0.2em] mb-2">Full Obligation Details</p>
+              <p className="text-sm font-sans font-medium text-black leading-relaxed">{task.action}</p>
             </div>
 
             {canSubmit && (
-              <div className="space-y-3 pt-2">
-                <p className="text-xs font-semibold text-foreground">Submit Evidence</p>
-                <label className="flex items-center gap-3 px-4 py-3 rounded-md border border-dashed border-border hover:border-primary/40 bg-muted/30 cursor-pointer transition-all group">
-                  <Paperclip size={14} className="text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                    {fileName || 'Attach document, screenshot, or certificate…'}
+              <div className="space-y-4 bg-white border border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <p className="text-sm font-mono font-bold text-black uppercase tracking-widest border-b border-black pb-2">Submit Evidence</p>
+                <label className="flex items-center gap-3 px-4 py-6 border-2 border-dashed border-black/30 hover:border-black bg-[#fbfbfa] cursor-pointer transition-all group group-hover:bg-black/5">
+                  <Paperclip size={20} className="text-black/50 group-hover:text-black transition-colors" />
+                  <span className="text-sm font-mono text-black/60 group-hover:text-black transition-colors">
+                    {fileName || 'SELECT FILE (PDF/DOCX/PNG)...'}
                   </span>
                   <input
                     type="file"
@@ -122,18 +119,18 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add notes or context for the compliance team (optional)…"
-                  rows={2}
-                  className="w-full bg-input border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 resize-none transition-all"
+                  placeholder="ADD NOTES OR CONTEXT FOR COMPLIANCE REVIEW (OPTIONAL)..."
+                  rows={3}
+                  className="w-full bg-[#fbfbfa] border border-black rounded-none px-4 py-3 text-sm font-mono text-black placeholder:text-black/40 focus:outline-none focus:ring-0 focus:border-primary resize-none transition-all"
                 />
-                <div className="flex items-center justify-between">
-                  <p className="text-2xs text-muted-foreground">ARCA will review your submission within 24 hours</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+                  <p className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-widest">ARCA auto-reviews submissions within 24h</p>
                   <button
                     onClick={handleSubmit}
                     disabled={uploading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold bg-primary text-background hover:bg-accent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 px-8 py-3 bg-primary text-white font-mono text-sm font-bold uppercase tracking-widest border border-black hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   >
-                    {uploading ? 'Submitting...' : 'Submit Evidence'}
+                    {uploading ? 'UPLOADING...' : 'SUBMIT EVIDENCE'}
                   </button>
                 </div>
               </div>
@@ -183,56 +180,64 @@ export default function MyTasksPage() {
 
   return (
     <AppLayout activeRoute="/my-tasks">
-      <div className="space-y-5 fade-in-up">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="space-y-8 pb-12 fade-in-up">
+        {/* Header - Editorial Layout */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between border-b-[3px] border-black pb-4 mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">My Tasks</h1>
+            <div className="flex items-center gap-2 mb-2">
+              <ClipboardList size={16} className="text-primary" strokeWidth={3} />
+              <span className="text-[10px] font-mono font-bold text-foreground uppercase tracking-[0.2em]">Personal Queue</span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">My Tasks</h1>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Stats Grid - Brutalist */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total Assigned', value: counts.all, color: 'text-foreground' },
-            { label: 'Pending Action', value: counts.pending_evidence + counts.rework_required, color: 'text-warning' },
-            { label: 'Under Review', value: counts.under_review, color: 'text-info' },
-            { label: 'Completed', value: counts.completed, color: 'text-success' },
-          ].map((stat) => (
-            <div key={stat.label} className="card-elevated border border-border px-4 py-3">
-              <p className="text-2xs text-muted-foreground font-mono-data uppercase tracking-wider mb-1">{stat.label}</p>
-              <p className={`text-2xl font-bold font-mono-data ${stat.color}`}>{stat.value}</p>
+            { label: 'Total Assigned', value: counts.all, color: 'text-black', border: 'border-black' },
+            { label: 'Pending Action', value: counts.pending_evidence + counts.rework_required, color: 'text-warning', border: 'border-warning' },
+            { label: 'Under Review', value: counts.under_review, color: 'text-info', border: 'border-info' },
+            { label: 'Completed', value: counts.completed, color: 'text-success', border: 'border-success' },
+          ].map((stat, idx) => (
+            <div key={stat.label} className={`card-elevated bg-white p-5 border ${stat.border} stagger-${idx + 1}`}>
+              <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-black/60 mb-2">{stat.label}</p>
+              <p className={`text-4xl font-mono font-bold ${stat.color}`}>{stat.value}</p>
             </div>
           ))}
         </div>
 
-        <div className="flex items-center gap-1 flex-wrap">
+        {/* Filter Tabs - Brutalist */}
+        <div className="flex items-center flex-wrap gap-0 border border-black bg-white inline-flex shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] stagger-4">
           {[
             { key: 'all', label: 'All Tasks' },
             { key: 'pending_evidence', label: 'Pending' },
             { key: 'rework_required', label: 'Rejected' },
             { key: 'under_review', label: 'Under Review' },
             { key: 'completed', label: 'Completed' },
-          ].map((tab) => (
+          ].map((tab, idx) => (
             <button
               key={tab.key}
               onClick={() => setFilterStatus(tab.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 border ${
+              className={`flex items-center gap-2 px-5 py-4 text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-colors ${idx !== 0 ? 'border-l border-black' : ''} ${
                 filterStatus === tab.key
-                  ? 'bg-primary/10 text-primary border-primary/25' : 'bg-muted/50 text-muted-foreground border-border hover:text-foreground'
+                  ? 'bg-black text-white' : 'bg-transparent text-black hover:bg-[#fbfbfa]'
               }`}
             >
-              {tab.label}
-              <span className={`font-mono-data text-2xs px-1 rounded ${filterStatus === tab.key ? 'bg-primary/20' : 'bg-muted'}`}>
+              <span>{tab.label}</span>
+              <span className={`px-1.5 py-0.5 border ${filterStatus === tab.key ? 'border-white/30 text-white' : 'border-black/20 text-black/50'}`}>
                 {counts[tab.key as keyof typeof counts] ?? counts.all}
               </span>
             </button>
           ))}
         </div>
 
-        <div className="space-y-3">
+        {/* Task List */}
+        <div className="space-y-6 stagger-4">
           {filteredTasks.length === 0 ? (
-            <div className="card-elevated border border-border px-6 py-12 text-center">
-              <CheckCircle size={24} className="text-success mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No tasks in this category</p>
+            <div className="card-elevated border-2 border-black border-dashed bg-[#fbfbfa] px-6 py-20 text-center">
+              <CheckCircle size={40} className="text-black/20 mx-auto mb-4" />
+              <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/50">No tasks in this category</p>
             </div>
           ) : (
             filteredTasks.map((task) => <TaskCard key={task.id} task={task} token={token || ''} onSubmitted={() => window.location.reload()} />)

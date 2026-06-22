@@ -4,39 +4,33 @@ import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Link } from 'react-router-dom';
 import {
-  FileSearch, CheckSquare, AlertTriangle, TrendingUp, Clock, Zap,
-  Activity, FileText, ArrowUpRight, CheckCircle, ChevronUp, ChevronDown, ExternalLink,
-  ClipboardCheck, ArrowRight
+  FileSearch, AlertTriangle, TrendingUp, Clock, FileText, ArrowUpRight, CheckCircle, ChevronUp, ChevronDown, ArrowRight, Activity
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 
-// --- HELPER COMPONENTS ---
-
 const vClasses: Record<string, any> = {
-  warning: { icon: 'text-warning', val: 'text-warning', border: 'border-warning/25', bg: 'bg-warning/5' },
-  danger: { icon: 'text-danger', val: 'text-danger', border: 'border-danger/25', bg: 'bg-danger/5' },
-  success: { icon: 'text-success', val: 'text-success', border: 'border-success/20', bg: 'bg-success/5' },
-  primary: { icon: 'text-primary', val: 'text-primary', border: 'border-primary/25', bg: 'bg-primary/5' },
-  info: { icon: 'text-info', val: 'text-info', border: 'border-info/20', bg: 'bg-info/5' },
+  warning: { icon: 'text-warning', val: 'text-warning', bg: 'bg-warning-muted', border: 'border-warning' },
+  danger: { icon: 'text-danger', val: 'text-danger', bg: 'bg-danger-muted', border: 'border-danger' },
+  success: { icon: 'text-success', val: 'text-success', bg: 'bg-success-muted', border: 'border-success' },
+  primary: { icon: 'text-primary', val: 'text-primary', bg: 'bg-black text-white', border: 'border-black' },
+  info: { icon: 'text-info', val: 'text-info', bg: 'bg-info-muted', border: 'border-info' },
 };
 
 function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-xl">
+    <div className="bg-black text-white px-3 py-2 border-none">
       {payload.map((p: any, i: number) => (
-        <p key={i} className="text-xs font-semibold font-mono-data" style={{ color: p.color }}>
-          {p.name}: {p.value}%
+        <p key={i} className="text-xs font-mono uppercase tracking-widest">
+          {p.name}: <span className="text-primary">{p.value}%</span>
         </p>
       ))}
     </div>
   );
 }
-
-// --- MAIN PAGE COMPONENT ---
 
 export default function DashboardPage() {
   const { token } = useAuth();
@@ -63,146 +57,176 @@ export default function DashboardPage() {
   }, [token]);
 
   const metricsArray = [
-    { id: 'gate1', label: 'Gate 1 Queue', value: data.metrics.gate1, unit: 'items', icon: FileSearch, variant: 'warning', hero: true, href: '/map-review-screen' },
-    { id: 'overdue', label: 'Overdue', value: data.metrics.overdue, unit: 'tasks', icon: AlertTriangle, variant: 'danger', hero: false, href: null },
-    { id: 'compliance', label: 'Compliance Rate', value: data.metrics.compliance, unit: '%', icon: TrendingUp, variant: 'success', hero: false, href: null },
-    { id: 'deadlines', label: 'Upcoming', value: data.metrics.deadlines, unit: 'tasks', icon: Clock, variant: 'info', hero: false, href: null },
+    { id: 'gate1', label: 'Gate 1 Queue', value: data.metrics.gate1, unit: 'MAPs', icon: FileSearch, variant: 'warning', hero: true, href: '/map-review-screen' },
+    { id: 'overdue', label: 'Overdue Executions', value: data.metrics.overdue, unit: 'Tasks', icon: AlertTriangle, variant: 'danger', hero: false, href: null },
+    { id: 'compliance', label: 'Compliance Index', value: data.metrics.compliance, unit: '%', icon: TrendingUp, variant: 'success', hero: false, href: null },
+    { id: 'deadlines', label: 'Upcoming Target', value: data.metrics.deadlines, unit: 'Tasks', icon: Clock, variant: 'info', hero: false, href: null },
   ];
 
-  // Use recent_circulars from backend for activities instead of hardcoded data
-  const activities = data.recent_circulars.slice(0, 3).map((c: any, i: number) => ({
+  const activities = (data.recent_circulars || []).slice(0, 4).map((c: any, i: number) => ({
     id: c.id,
     icon: FileText,
-    color: 'text-primary',
-    bg: 'bg-primary/10',
-    title: `New circular: ${c.ref_number}`,
-    time: new Date(c.date).toLocaleDateString()
+    color: 'text-foreground',
+    bg: 'bg-transparent border border-black',
+    title: `${c.ref_number}`,
+    time: new Date(c.date || c.created_at || Date.now()).toLocaleDateString()
   }));
 
   return (
     <AppLayout activeRoute="/">
-      <div className="space-y-6 fade-in-up">
+      <div className="space-y-8 pb-12 fade-in-up">
         
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* HEADER - Editorial Layout */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between border-b-[3px] border-black pb-4 mb-8">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <div className="flex items-center gap-2 mb-2">
+              <Activity size={16} className="text-primary" strokeWidth={3} />
+              <span className="text-[10px] font-mono font-bold text-foreground uppercase tracking-[0.2em]">Platform Overview</span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">Intelligence</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <Link to="/map-review-screen" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-accent transition-all">
-              <ClipboardCheck size={14} /><span>Review MAPs</span><ArrowRight size={13} />
+          <div className="mt-6 md:mt-0">
+            <Link to="/map-review-screen" className="group inline-flex items-center justify-center gap-3 px-6 py-3 bg-primary text-white font-mono text-sm font-bold tracking-widest hover:bg-black transition-colors uppercase">
+              <span>Review MAPs</span>
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
         </div>
 
-        {/* METRICS GRID */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {metricsArray.map((m) => {
+        {/* METRICS GRID - Brutalist */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {metricsArray.map((m, idx) => {
             const Icon = m.icon;
-            const v = vClasses[m.variant];
             const content = (
               <>
-                <div className="flex justify-between items-center mb-2">
-                  <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{m.label}</p>
-                  <Icon size={16} className={v.icon} />
+                <div className="flex justify-between items-start mb-6">
+                  <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-foreground/80">{m.label}</p>
+                  <Icon size={18} className="text-foreground" strokeWidth={2.5} />
                 </div>
-                <div className="flex items-baseline gap-1 mt-2">
-                  <span className={`text-3xl font-bold font-mono-data ${v.val}`}>{m.value}</span>
-                  <span className={`text-xs ${v.val} opacity-70`}>{m.unit}</span>
+                <div className="mt-auto">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-5xl font-mono font-bold text-black tracking-tighter">{m.value}</span>
+                    <span className="text-sm font-mono font-bold text-black/60 uppercase">{m.unit}</span>
+                  </div>
                 </div>
               </>
             );
 
+            const isHero = m.hero;
+            const baseClasses = `card-elevated p-6 flex flex-col justify-between stagger-${idx + 1} ${isHero ? 'bg-black text-white lg:col-span-2' : 'bg-white'}`;
+            const linkClasses = `card-elevated-hover p-6 flex flex-col justify-between stagger-${idx + 1} ${isHero ? 'bg-black text-white lg:col-span-2' : 'bg-white'}`;
+
             if (m.href) {
               return (
-                <Link key={m.id} to={m.href} className={`col-span-${m.hero ? 2 : 1} card-elevated-hover p-4 ${v.bg} border ${v.border} flex flex-col justify-between`}>
+                <Link key={m.id} to={m.href} className={linkClasses}>
                   {content}
+                  {/* If black background, invert text */}
+                  {isHero && (
+                    <div className="absolute top-6 right-6">
+                      <ArrowUpRight size={24} className="text-primary" />
+                    </div>
+                  )}
                 </Link>
               );
             }
             return (
-              <div key={m.id} className={`col-span-${m.hero ? 2 : 1} card-elevated-hover p-4 ${v.bg} border ${v.border} flex flex-col justify-between`}>
+              <div key={m.id} className={baseClasses}>
                 {content}
               </div>
             );
           })}
         </div>
 
-        {/* CHARTS */}
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-          <div className="xl:col-span-3 card-elevated p-5">
-            <h3 className="text-sm font-semibold mb-4">Compliance Trend</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={data.trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="rate" stroke="var(--primary)" strokeWidth={2} fill="url(#grad)" activeDot={{ r: 4 }} />
-              </AreaChart>
-            </ResponsiveContainer>
+        {/* CHARTS - Strict Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+          <div className="xl:col-span-3 card-elevated bg-white p-0 overflow-hidden flex flex-col stagger-3">
+            <div className="p-5 border-b border-black flex items-center justify-between bg-[#fbfbfa]">
+              <h3 className="text-lg font-serif text-black uppercase tracking-widest">Compliance Trajectory</h3>
+              <span className="text-[10px] font-mono font-bold px-2 py-1 bg-black text-white uppercase tracking-widest">30 Days</span>
+            </div>
+            <div className="p-6 flex-1">
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={data.trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="2 2" stroke="#d1d1cf" vertical={false} />
+                  <XAxis dataKey="week" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace' }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis domain={[0, 100]} tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} dx={-10} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#111', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Area type="monotone" dataKey="rate" stroke="#FF3300" strokeWidth={3} fill="transparent" activeDot={{ r: 6, fill: '#FF3300', stroke: '#111', strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
           
-          <div className="xl:col-span-2 card-elevated p-5">
-            <h3 className="text-sm font-semibold mb-4">Department Health</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data.deptData} layout="vertical" margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                <XAxis type="number" domain={[0, 100]} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="dept" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="rate" radius={[0, 3, 3, 0]} maxBarSize={14}>
-                  {data.deptData.map((e: any, i: number) => (
-                    <Cell key={i} fill={e.rate >= 90 ? 'var(--success)' : e.rate >= 75 ? 'var(--primary)' : 'var(--warning)'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="xl:col-span-2 card-elevated bg-white p-0 flex flex-col stagger-4">
+            <div className="p-5 border-b border-black bg-[#fbfbfa]">
+              <h3 className="text-lg font-serif text-black uppercase tracking-widest">Department Index</h3>
+            </div>
+            <div className="p-6 flex-1">
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={data.deptData} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }} barCategoryGap="20%">
+                  <CartesianGrid strokeDasharray="2 2" stroke="#d1d1cf" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fill: '#111', fontSize: 10, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="dept" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={90} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f4f4f0' }} />
+                  <Bar dataKey="rate" radius={0}>
+                    {data.deptData.map((e: any, i: number) => (
+                      <Cell key={i} fill={e.rate >= 90 ? '#00AA00' : e.rate >= 75 ? '#0028FF' : '#FF5500'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* BOTTOM ROW */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2 card-elevated p-5">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-semibold">Upcoming Deadlines</h3>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="xl:col-span-2 card-elevated bg-white p-0 stagger-3">
+            <div className="p-5 border-b border-black flex justify-between items-center bg-[#fbfbfa]">
+              <h3 className="text-lg font-serif text-black uppercase tracking-widest">Imminent Action Required</h3>
               <div 
-                className="cursor-pointer flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                className="cursor-pointer flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest text-black hover:text-primary transition-colors"
                 onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
               >
-                Sort {sortDir === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                Sort {sortDir === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-2">
-              <div className="p-3 text-center text-sm text-muted-foreground">
-                No upcoming deadlines for your active MAPs.
+            <div className="p-12 flex flex-col items-center justify-center min-h-[200px]">
+              <div className="w-16 h-16 border-2 border-black rounded-full flex items-center justify-center mb-4">
+                <CheckCircle size={24} className="text-black" />
               </div>
+              <p className="text-sm font-mono uppercase tracking-widest text-black/60 font-bold">Zero Imminent Deadlines</p>
             </div>
           </div>
 
-          <div className="xl:col-span-1 card-elevated p-5">
-            <h3 className="text-sm font-semibold mb-4">Activity</h3>
-            <div className="space-y-4">
-              {activities.map(a => {
-                const Icon = a.icon;
-                return (
-                  <div key={a.id} className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full ${a.bg} flex items-center justify-center flex-shrink-0`}>
-                      <Icon size={14} className={a.color} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{a.title}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground font-mono-data">{a.time}</p>
-                  </div>
-                );
-              })}
+          <div className="xl:col-span-1 card-elevated bg-white p-0 stagger-4">
+            <div className="p-5 border-b border-black bg-[#fbfbfa]">
+              <h3 className="text-lg font-serif text-black uppercase tracking-widest">Log</h3>
+            </div>
+            <div className="p-0">
+              {activities.length > 0 ? (
+                <div className="flex flex-col">
+                  {activities.map((a: any, i: number) => {
+                    const Icon = a.icon;
+                    return (
+                      <div key={a.id} className={`flex items-stretch ${i !== activities.length - 1 ? 'border-b border-black/10' : ''}`}>
+                        <div className="w-12 bg-black/5 flex items-center justify-center border-r border-black/10 flex-shrink-0">
+                          <Icon size={16} className="text-black" />
+                        </div>
+                        <div className="p-4 flex-1">
+                          <p className="text-[10px] font-mono font-bold uppercase tracking-[0.1em] text-primary mb-1">New Circular</p>
+                          <p className="text-sm font-bold text-black">{a.title}</p>
+                          <p className="text-[10px] font-mono text-black/50 mt-2">{a.time}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-12 flex items-center justify-center">
+                  <p className="text-xs font-mono uppercase tracking-widest text-black/40">No entries.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

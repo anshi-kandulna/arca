@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
-import { ScrollText, Search, Download, CheckCircle, Edit3, Send, AlertTriangle, Eye, UserCheck, Clock, Filter } from 'lucide-react';
+import { ScrollText, Search, Download, CheckCircle, Edit3, Send, AlertTriangle, Eye, UserCheck, Clock, Filter, Activity } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AuditEntry {
   id: string;
@@ -10,37 +11,23 @@ interface AuditEntry {
   actor: string;
   actorRole: string;
   action: string;
-  actionType: 'approval' | 'edit' | 'dispatch' | 'escalation' | 'submission' | 'verification' | 'detection' | 'rejection';
+  actionType: string;
   circularRef: string;
   mapId?: string;
   department?: string;
   details: string;
 }
 
-const auditLog: AuditEntry[] = [
-  { id: 'a001', timestamp: '07 Jun 2026, 16:45 IST', actor: 'Ananya Sharma', actorRole: 'Chief Compliance Officer', action: 'Approved MAP batch for dispatch', actionType: 'approval', circularRef: 'RBI/2026-27/18', mapId: 'MAP-2026-033 to MAP-2026-039', department: 'Multiple', details: '7 MAPs approved and dispatched to Legal, Operations, and Risk departments after Gate 1 review.' },
-  { id: 'a002', timestamp: '07 Jun 2026, 16:30 IST', actor: 'Ananya Sharma', actorRole: 'Chief Compliance Officer', action: 'Edited MAP — department reassigned', actionType: 'edit', circularRef: 'RBI/2026-27/18', mapId: 'MAP-2026-035', department: 'Risk', details: 'Reassigned from "Compliance" to "Risk" department. ARCA correction saved for learning.' },
-  { id: 'a003', timestamp: '07 Jun 2026, 14:32 IST', actor: 'ARCA System', actorRole: 'Automated Agent', action: 'New circular detected and processed', actionType: 'detection', circularRef: 'FEMA 389(1)/2026', details: 'Circular detected on RBI website. 3 MAPs extracted with 93.4% confidence. Awaiting Gate 1 review.' },
-  { id: 'a004', timestamp: '05 Jun 2026, 15:20 IST', actor: 'Priya Venkataraman', actorRole: 'Head of Legal', action: 'Evidence submitted for MAP', actionType: 'submission', circularRef: 'DBR.CID.No.43/2026', mapId: 'MAP-2026-041', department: 'Legal', details: 'Revised KYC Policy document (v2.3) submitted with Digital Nomad Visa added to OVD list. Board-approved version attached.' },
-  { id: 'a005', timestamp: '05 Jun 2026, 09:15 IST', actor: 'ARCA System', actorRole: 'Automated Agent', action: 'New circular detected and processed', actionType: 'detection', circularRef: 'DBR.CID.No.43/2026', details: 'Circular detected on RBI website. 5 MAPs extracted with 89.2% confidence. Awaiting Gate 1 review.' },
-  { id: 'a006', timestamp: '04 Jun 2026, 11:00 IST', actor: 'ARCA System', actorRole: 'Automated Agent', action: 'Evidence verified — task closed', actionType: 'verification', circularRef: 'RBI/2026-27/18', mapId: 'MAP-2026-036', department: 'Operations', details: 'Submitted evidence reviewed. Document inventory list satisfies requirement. Task automatically closed (MEDIUM priority, confidence 91%).' },
-  { id: 'a007', timestamp: '03 Jun 2026, 09:30 IST', actor: 'ARCA System', actorRole: 'Automated Agent', action: 'Escalation triggered — task overdue', actionType: 'escalation', circularRef: 'DPSS.CO.PD.No.12/2026', mapId: 'MAP-2026-028', department: 'Operations', details: 'Task deadline passed without submission. Escalation sent to Rajesh Nair (Head of Operations). Second reminder scheduled in 48 hours.' },
-  { id: 'a008', timestamp: '01 Jun 2026, 17:15 IST', actor: 'Ananya Sharma', actorRole: 'Chief Compliance Officer', action: 'Gate 2 sign-off — HIGH priority task closed', actionType: 'approval', circularRef: 'RBI/2026-27/18', mapId: 'MAP-2026-033', department: 'Compliance', details: 'Compliance officer personally confirmed closure of HIGH priority task. Evidence reviewed and accepted. Permanent record created.' },
-  { id: 'a009', timestamp: '01 Jun 2026, 14:00 IST', actor: 'Sunita Mehta', actorRole: 'Head of HR', action: 'Evidence submitted for MAP', actionType: 'submission', circularRef: 'DBR.CID.No.43/2026', mapId: 'MAP-2026-042', department: 'HR', details: 'Training completion certificates for 47 front-office staff submitted. Attendance register and training materials attached.' },
-  { id: 'a010', timestamp: '31 May 2026, 10:45 IST', actor: 'ARCA System', actorRole: 'Automated Agent', action: 'Evidence rejected — insufficient proof', actionType: 'rejection', circularRef: 'DPSS.CO.PD.No.12/2026', mapId: 'MAP-2026-029', department: 'Operations', details: 'Submitted screenshot does not demonstrate completion of enhanced due diligence workflow. Missing: merchant risk scoring documentation. Returned to Operations for resubmission.' },
-  { id: 'a011', timestamp: '28 May 2026, 16:20 IST', actor: 'ARCA System', actorRole: 'Automated Agent', action: 'New circular detected and processed', actionType: 'detection', circularRef: 'DPSS.CO.PD.No.12/2026', details: 'Circular detected on RBI website. 4 MAPs extracted with 85.6% confidence. Awaiting Gate 1 review.' },
-  { id: 'a012', timestamp: '22 May 2026, 12:00 IST', actor: 'Ananya Sharma', actorRole: 'Chief Compliance Officer', action: 'Approved MAP batch for dispatch', actionType: 'approval', circularRef: 'DOR.MRG.REC.No.9/2026', mapId: 'MAP-2026-021 to MAP-2026-022', department: 'Treasury', details: '2 MAPs approved and dispatched to Treasury department after Gate 1 review.' },
-];
-
-const actionTypeConfig: Record<string, { icon: React.ElementType; bg: string; border: string; text: string; label: string }> = {
-  approval: { icon: CheckCircle, bg: 'bg-success/10', border: 'border-success/25', text: 'text-success', label: 'Approval' },
-  edit: { icon: Edit3, bg: 'bg-primary/10', border: 'border-primary/25', text: 'text-primary', label: 'Edit' },
-  dispatch: { icon: Send, bg: 'bg-info/10', border: 'border-info/25', text: 'text-info', label: 'Dispatch' },
-  escalation: { icon: AlertTriangle, bg: 'bg-danger/10', border: 'border-danger/25', text: 'text-danger', label: 'Escalation' },
-  submission: { icon: UserCheck, bg: 'bg-blue-500/10', border: 'border-blue-500/25', text: 'text-blue-400', label: 'Submission' },
-  verification: { icon: CheckCircle, bg: 'bg-teal-500/10', border: 'border-teal-500/25', text: 'text-teal-400', label: 'Verification' },
-  detection: { icon: Eye, bg: 'bg-purple-500/10', border: 'border-purple-500/25', text: 'text-purple-400', label: 'Detection' },
-  rejection: { icon: AlertTriangle, bg: 'bg-orange-500/10', border: 'border-orange-500/25', text: 'text-orange-400', label: 'Rejection' },
+const actionTypeConfig: Record<string, { icon: React.ElementType; bg: string; text: string; label: string }> = {
+  approval: { icon: CheckCircle, bg: 'bg-success-muted', text: 'text-success', label: 'Approval' },
+  edit: { icon: Edit3, bg: 'bg-info-muted', text: 'text-info', label: 'Edit' },
+  dispatch: { icon: Send, bg: 'bg-primary/10', text: 'text-primary', label: 'Dispatch' },
+  escalation: { icon: AlertTriangle, bg: 'bg-danger-muted', text: 'text-danger', label: 'Escalation' },
+  submission: { icon: UserCheck, bg: 'bg-info-muted', text: 'text-info', label: 'Submission' },
+  verification: { icon: CheckCircle, bg: 'bg-success-muted', text: 'text-success', label: 'Verification' },
+  detection: { icon: Eye, bg: 'bg-black', text: 'text-white', label: 'Detection' },
+  rejection: { icon: AlertTriangle, bg: 'bg-warning-muted', text: 'text-warning', label: 'Rejection' },
+  default: { icon: Activity, bg: 'bg-[#fbfbfa]', text: 'text-black', label: 'Action' }
 };
 
 const filterOptions = [
@@ -54,14 +41,32 @@ const filterOptions = [
 ];
 
 export default function AuditTrailPage() {
+  const { token } = useAuth();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/audit', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setAuditLog(data || []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch audit log", err);
+        setLoading(false);
+      });
+  }, [token]);
 
   const filtered = auditLog.filter((entry) => {
     const matchSearch =
-      entry.circularRef.toLowerCase().includes(search.toLowerCase()) ||
-      entry.actor.toLowerCase().includes(search.toLowerCase()) ||
-      entry.action.toLowerCase().includes(search.toLowerCase()) ||
+      (entry.circularRef || '').toLowerCase().includes(search.toLowerCase()) ||
+      (entry.actor || '').toLowerCase().includes(search.toLowerCase()) ||
+      (entry.action || '').toLowerCase().includes(search.toLowerCase()) ||
       (entry.mapId?.toLowerCase().includes(search.toLowerCase()) ?? false);
     const matchType = filterType === 'all' || entry.actionType === filterType;
     return matchSearch && matchType;
@@ -69,59 +74,62 @@ export default function AuditTrailPage() {
 
   return (
     <AppLayout activeRoute="/audit">
-      <div className="space-y-5 fade-in-up">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="space-y-8 pb-12 fade-in-up">
+        {/* Header - Editorial Layout */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between border-b-[3px] border-black pb-4 mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <ScrollText size={14} className="text-primary" />
-              <span className="text-2xs font-mono-data text-muted-foreground uppercase tracking-widest">Immutable Record</span>
+            <div className="flex items-center gap-2 mb-2">
+              <ScrollText size={16} className="text-primary" strokeWidth={3} />
+              <span className="text-[10px] font-mono font-bold text-foreground uppercase tracking-[0.2em]">Immutable Record</span>
             </div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Audit Trail</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Complete history of every action taken in ARCA — exportable for RBI inspection</p>
+            <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">Audit Trail</h1>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-muted border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all">
-            <Download size={13} />
-            Export CSV
-          </button>
+          <div className="mt-6 md:mt-0">
+            <button className="flex items-center justify-center gap-3 px-6 py-3 bg-white border border-black text-black font-mono text-sm font-bold tracking-widest hover:bg-black hover:text-white transition-colors uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Download size={16} />
+              <span>Export CSV</span>
+            </button>
+          </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Stats - Brutalist */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Events', value: auditLog.length, color: 'text-foreground' },
-            { label: 'Human Actions', value: auditLog.filter(e => e.actor !== 'ARCA System').length, color: 'text-primary' },
-            { label: 'System Events', value: auditLog.filter(e => e.actor === 'ARCA System').length, color: 'text-purple-400' },
-            { label: 'Escalations', value: auditLog.filter(e => e.actionType === 'escalation').length, color: 'text-danger' },
-          ].map((stat) => (
-            <div key={stat.label} className="card-elevated border border-border px-4 py-3">
-              <p className="text-2xs text-muted-foreground font-mono-data uppercase tracking-wider mb-1">{stat.label}</p>
-              <p className={`text-2xl font-bold font-mono-data ${stat.color}`}>{stat.value}</p>
+            { label: 'Total Events', value: auditLog.length, color: 'text-black', border: 'border-black' },
+            { label: 'Human Actions', value: auditLog.filter(e => e.actor !== 'ARCA System').length, color: 'text-primary', border: 'border-primary' },
+            { label: 'System Events', value: auditLog.filter(e => e.actor === 'ARCA System').length, color: 'text-info', border: 'border-info' },
+            { label: 'Escalations', value: auditLog.filter(e => e.actionType === 'escalation').length, color: 'text-danger', border: 'border-danger' },
+          ].map((stat, idx) => (
+            <div key={stat.label} className={`card-elevated bg-white p-5 border ${stat.border} stagger-${idx + 1}`}>
+              <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-black/60 mb-2">{stat.label}</p>
+              <p className={`text-4xl font-mono font-bold ${stat.color}`}>{stat.value}</p>
             </div>
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        {/* Filters - Brutalist */}
+        <div className="flex flex-col md:flex-row gap-0 border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="relative flex-1 border-b md:border-b-0 md:border-r border-black">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-black" />
             <input
               type="text"
-              placeholder="Search by circular, actor, MAP ID, or action…"
+              placeholder="Search circular, actor, MAP ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-input border border-border rounded-md pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+              className="w-full bg-transparent border-none pl-12 pr-4 py-4 text-sm font-mono text-black placeholder:text-black/40 focus:outline-none focus:ring-0"
             />
           </div>
-          <div className="flex items-center gap-1 flex-wrap">
-            <Filter size={12} className="text-muted-foreground mr-1" />
-            {filterOptions.map((opt) => (
+          <div className="flex items-center flex-wrap">
+            <div className="px-4 py-4 border-r border-black flex items-center justify-center bg-[#fbfbfa]">
+              <Filter size={18} className="text-black" />
+            </div>
+            {filterOptions.map((opt, idx) => (
               <button
                 key={opt.key}
                 onClick={() => setFilterType(opt.key)}
-                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
+                className={`px-4 py-4 text-xs font-mono font-bold uppercase tracking-widest transition-colors ${idx !== filterOptions.length - 1 ? 'border-r border-black' : ''} ${
                   filterType === opt.key
-                    ? 'bg-primary/10 text-primary border-primary/25' :'bg-muted/50 text-muted-foreground border-border hover:text-foreground'
+                    ? 'bg-black text-white' : 'bg-transparent text-black hover:bg-[#fbfbfa]'
                 }`}
               >
                 {opt.label}
@@ -131,68 +139,78 @@ export default function AuditTrailPage() {
         </div>
 
         {/* Audit Log */}
-        <div className="card-elevated border border-border overflow-hidden">
-          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <span className="text-xs font-medium text-foreground">
-              {filtered.length} event{filtered.length !== 1 ? 's' : ''}
+        <div className="card-elevated bg-white p-0 overflow-hidden stagger-4">
+          <div className="px-6 py-4 border-b-2 border-black flex items-center justify-between bg-[#fbfbfa]">
+            <span className="text-sm font-mono font-bold uppercase tracking-widest text-black">
+              {filtered.length} Event{filtered.length !== 1 ? 's' : ''}
             </span>
-            <span className="text-2xs font-mono-data text-muted-foreground">Sorted by most recent</span>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-black/50">Chronological Desc</span>
           </div>
 
-          {filtered.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <ScrollText size={24} className="text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No audit events match your filter</p>
+          {loading ? (
+            <div className="px-6 py-16 text-center">
+              <div className="w-10 h-10 border-4 border-black/20 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/60">Loading Audit Trail...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <ScrollText size={40} className="text-black/20 mx-auto mb-4" />
+              <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/60">No audit events match your filter</p>
             </div>
           ) : (
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-black/10">
               {filtered.map((entry) => {
-                const ac = actionTypeConfig[entry.actionType] || actionTypeConfig.detection;
+                const ac = actionTypeConfig[entry.actionType] || actionTypeConfig.default;
                 const ActionIcon = ac.icon;
                 const isSystem = entry.actor === 'ARCA System';
 
                 return (
-                  <div key={entry.id} className="px-5 py-4 hover:bg-muted/20 transition-colors">
-                    <div className="flex items-start gap-4">
-                      {/* Icon */}
-                      <div className={`w-8 h-8 rounded-md ${ac.bg} border ${ac.border} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                        <ActionIcon size={13} className={ac.text} />
+                  <div key={entry.id} className="p-6 hover:bg-[#fbfbfa] transition-colors border-l-4 border-transparent hover:border-black">
+                    <div className="flex flex-col md:flex-row md:items-start gap-6">
+                      
+                      {/* Left Sidebar Time & Action */}
+                      <div className="flex items-center gap-4 md:w-64 flex-shrink-0">
+                        <div className={`w-12 h-12 flex items-center justify-center border border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${ac.bg}`}>
+                          <ActionIcon size={20} className={ac.text} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Clock size={12} className="text-black/50" />
+                            <span className="text-xs font-mono font-bold text-black/70">{entry.timestamp.split('T')[1]?.substring(0, 5) || entry.timestamp}</span>
+                          </div>
+                          <span className={`px-2 py-1 border border-black text-[10px] font-mono font-bold uppercase tracking-widest ${ac.bg} ${ac.text}`}>{ac.label}</span>
+                        </div>
                       </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 mb-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-foreground">{entry.action}</span>
-                            <span className={`gate-badge border text-2xs ${ac.bg} ${ac.text} ${ac.border}`}>{ac.label}</span>
-                          </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <Clock size={10} className="text-muted-foreground" />
-                            <span className="text-2xs font-mono-data text-muted-foreground">{entry.timestamp}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 mb-2 flex-wrap">
-                          <div className="flex items-center gap-1.5">
-                            <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${isSystem ? 'bg-purple-500/20 border border-purple-500/30' : 'bg-primary/20 border border-primary/30'}`}>
-                              <span className={`text-2xs font-bold ${isSystem ? 'text-purple-400' : 'text-primary'}`}>
-                                {isSystem ? 'A' : entry.actor.split(' ').map(n => n[0]).join('')}
+                      {/* Main Content */}
+                      <div className="flex-1 min-w-0 space-y-3">
+                        <span className="text-lg font-serif font-bold text-black block">{entry.action}</span>
+                        
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-2 bg-[#fbfbfa] px-3 py-1 border border-black">
+                            <div className={`w-6 h-6 flex items-center justify-center border border-black ${isSystem ? 'bg-black text-white' : 'bg-primary text-white'}`}>
+                              <span className="text-[10px] font-mono font-bold">
+                                {isSystem ? 'S' : entry.actor.split(' ').map(n => n[0]).join('')}
                               </span>
                             </div>
-                            <span className="text-xs font-medium text-foreground">{entry.actor}</span>
-                            <span className="text-2xs text-muted-foreground">·</span>
-                            <span className="text-2xs text-muted-foreground">{entry.actorRole}</span>
+                            <span className="text-sm font-mono font-bold text-black">{entry.actor}</span>
+                            <span className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-widest">({entry.actorRole})</span>
                           </div>
-                          <span className="font-mono-data text-2xs font-bold text-primary">{entry.circularRef}</span>
+                          
+                          {entry.circularRef && (
+                            <span className="px-3 py-1 bg-white border border-black text-[10px] font-mono font-bold text-black uppercase tracking-widest">REF: {entry.circularRef}</span>
+                          )}
                           {entry.mapId && (
-                            <span className="font-mono-data text-2xs text-muted-foreground">{entry.mapId}</span>
+                            <span className="px-3 py-1 bg-white border border-black text-[10px] font-mono font-bold text-black uppercase tracking-widest">MAP: {entry.mapId}</span>
                           )}
                           {entry.department && (
-                            <span className="text-2xs text-muted-foreground">→ {entry.department}</span>
+                            <span className="px-3 py-1 bg-white border border-black text-[10px] font-mono font-bold text-black uppercase tracking-widest">DEPT: {entry.department}</span>
                           )}
                         </div>
 
-                        <p className="text-xs text-muted-foreground leading-relaxed">{entry.details}</p>
+                        <p className="text-sm font-sans font-medium text-black/80 leading-relaxed bg-[#fbfbfa] border-l-2 border-black p-3">
+                          {entry.details}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -205,3 +223,4 @@ export default function AuditTrailPage() {
     </AppLayout>
   );
 }
+

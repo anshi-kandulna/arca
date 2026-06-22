@@ -78,9 +78,9 @@ def run_full_pipeline(pdf_path, output_json_path, ollama_model="llama3.2:latest"
     print("\nStep 1: Running MAP Extraction Agent (Docling PDF Extraction + Ollama)...")
     print("Note: This can take a few minutes as it processes the entire PDF.")
     
-    # Change Cwd to backend/arca so extract.py reads circular.pdf correctly
-    extract_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "backend", "arca", "extract.py"))
-    extract_cwd = os.path.abspath(os.path.join(os.path.dirname(__file__), "backend", "arca"))
+    # Change Cwd to arca so extract.py reads circular.pdf correctly
+    extract_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "arca", "extract.py"))
+    extract_cwd = os.path.abspath(os.path.join(os.path.dirname(__file__), "arca"))
     
     # Copy PDF if it's different
     if pdf_path != os.path.join(extract_cwd, "circular.pdf"):

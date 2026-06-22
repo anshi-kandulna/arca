@@ -1,14 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 import json
 import os
 import uuid
 import uvicorn
+import shutil
 
 import auth
-from db import database, models, schemas
+from db import database, models, schemas, crud
+from run_pipeline import run_full_pipeline
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,7 +29,7 @@ models.Base.metadata.create_all(bind=database.engine)
 
 @app.post("/api/login", response_model=schemas.Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(models.User.email == form_data.username).first()
+    user = crud.get_user_by_email(db, form_data.username)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,62 +54,103 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
 def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):
     return current_user
 
+def process_circular_background(circular_id: str, pdf_path: str, output_json_path: str, bank_id: str):
+    try:
+        run_full_pipeline(pdf_path, output_json_path, ollama_model="llama3.2:latest")
+        
+        db = database.SessionLocal()
+        try:
+            with open(output_json_path, "r") as f:
+                data = json.load(f)
+            
+            circular = crud.get_circular(db, circular_id)
+            if circular:
+                circular.ref_number = data.get("circular_id", circular.ref_number)
+                circular.title = data.get("circular_title", circular.title)
+                if data.get("circular_date"):
+                    try:
+                        circular.published_date = datetime.strptime(data["circular_date"], "%Y-%m-%d").date()
+                    except:
+                        pass
+                
+                circular.total_pages = data.get("total_pages")
+                circular.page_summary = data.get("page_summary")
+                circular.vertical_summary = data.get("department_summary")
+                circular.sub_vertical_summary = data.get("sub_vertical_summary")
+                circular.priority_summary = data.get("priority_summary")
+                circular.total_obligations = data.get("total_maps", 0)
+                
+                for map_item in data.get("maps", []):
+                    crud.create_map(db, {
+                        "circular_id": circular.id,
+                        "bank_id": bank_id,
+                        "map_ref": map_item["map_id"],
+                        "obligation_text": map_item["action"],
+                        "business_vertical": map_item["department"],
+                        "sub_vertical": map_item.get("sub_vertical"),
+                        "routing_confidence": map_item.get("routing_confidence"),
+                        "deadline_raw": map_item.get("deadline_raw"),
+                        "clause_ref": map_item["clause_ref"],
+                        "priority": map_item["priority"],
+                        "page_no": map_item["page_no"]
+                    })
+                    
+                    if map_item["department"] and map_item["department"] != "Unassigned":
+                        crud.create_notification(db, bank_id=str(bank_id), business_vertical=map_item["department"], message=f"New obligation assigned from circular {circular.ref_number}: {map_item['action'][:80]}...")
+                
+                crud.update_circular(db, circular, {"status": "detected"})
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Background task failed: {e}")
+        db = database.SessionLocal()
+        try:
+            circular = crud.get_circular(db, circular_id)
+            if circular:
+                crud.update_circular(db, circular, {"status": "failed"})
+        finally:
+            db.close()
+
 @app.post("/api/circulars/upload", response_model=schemas.CircularUploadResponse)
 async def upload_circular(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    if current_user.role != "compliance_officer":
+    if current_user.role not in ["compliance_officer", "system_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to upload circulars")
         
-    # In a real app we'd save the file. Here we mock processing by reading arca_output.json
     try:
-        output_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "arca_output.json")
-        with open(output_path, "r") as f:
-            data = json.load(f)
+        uploads_dir = os.path.join(os.path.dirname(__file__), "arca", "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        pdf_path = os.path.join(uploads_dir, file.filename)
+        
+        with open(pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
             
-        # Create circular
-        circular = models.Circular(
+        circular = crud.create_circular(
+            db=db,
             bank_id=current_user.bank_id,
-            ref_number=data["circular_id"],
-            title=data["circular_title"],
-            published_date=data["circular_date"],
-            file_path=file.filename,
-            total_pages=data.get("total_pages"),
-            page_summary=data.get("page_summary"),
-            department_summary=data.get("department_summary"),
-            priority_summary=data.get("priority_summary"),
-            total_obligations=data.get("total_maps", 0),
-            status="processing"
+            ref_number=f"UPL-{uuid.uuid4().hex[:6]}",
+            title=file.filename,
+            file_path=file.filename
         )
-        db.add(circular)
-        db.commit()
-        db.refresh(circular)
         
-        # Load maps
-        for map_item in data.get("maps", []):
-            db_map = models.Map(
-                circular_id=circular.id,
-                bank_id=current_user.bank_id,
-                map_ref=map_item["map_id"],
-                obligation_text=map_item["action"],
-                department_raw=map_item["department_raw"],
-                deadline_raw=map_item["deadline_raw"],
-                clause_ref=map_item["clause_ref"],
-                priority=map_item["priority"],
-                page_no=map_item["page_no"],
-            )
-            db.add(db_map)
+        output_json_path = os.path.join(uploads_dir, f"{circular.id}_output.json")
         
-        # Mark complete
-        circular.status = "detected"
-        db.commit()
+        background_tasks.add_task(
+            process_circular_background, 
+            str(circular.id), 
+            pdf_path, 
+            output_json_path, 
+            str(current_user.bank_id)
+        )
         
         return {
-            "message": "Circular successfully processed",
+            "message": "Circular is processing in the background",
             "circular_id": str(circular.id),
-            "total_maps": circular.total_obligations
+            "total_maps": 0
         }
     except Exception as e:
         db.rollback()
@@ -119,8 +162,8 @@ def get_dashboard_stats(
     db: Session = Depends(database.get_db)
 ):
     # Depending on role, we might filter. For now, fetch all for the bank
-    circulars = db.query(models.Circular).filter(models.Circular.bank_id == current_user.bank_id).all()
-    maps = db.query(models.Map).filter(models.Map.bank_id == current_user.bank_id).all()
+    circulars = crud.get_circulars_by_bank(db, current_user.bank_id)
+    maps = crud.get_maps_by_bank(db, current_user.bank_id)
     
     # Calculate overdue maps (mock logic: assume some are overdue based on deadline_raw parsing, or just mock count for now)
     overdue_count = 0
@@ -137,8 +180,8 @@ def get_dashboard_stats(
     # Use the most recent circular for department health
     recent_circular = max(circulars, key=lambda x: x.published_date) if circulars else None
     dept_data = []
-    if recent_circular and recent_circular.department_summary:
-        for dept, stats in recent_circular.department_summary.items():
+    if recent_circular and recent_circular.vertical_summary:
+        for dept, stats in recent_circular.vertical_summary.items():
             if isinstance(stats, dict):
                 compliant = stats.get("compliant", 0)
                 total = stats.get("total", 1)
@@ -183,7 +226,7 @@ def get_circulars(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    circulars = db.query(models.Circular).filter(models.Circular.bank_id == current_user.bank_id).all()
+    circulars = crud.get_circulars_by_bank(db, current_user.bank_id)
     return [
         {
             "id": str(c.id),
@@ -206,19 +249,15 @@ def get_maps(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    query = db.query(models.Map).filter(models.Map.bank_id == current_user.bank_id)
-    if circular_id:
-        query = query.filter(models.Map.circular_id == circular_id)
-        
+    business_vertical_name = None
     if current_user.role in ['department_user', 'department_head']:
-        user_dept = db.query(models.Department).filter(models.Department.id == current_user.department_id).first()
+        user_dept = crud.get_business_vertical(db, current_user.business_vertical_id)
         if user_dept:
-            query = query.filter(models.Map.department_raw.ilike(f"%{user_dept.name}%"))
+            business_vertical_name = user_dept.name
         else:
-            # If a department user has no department assigned, show them no tasks instead of all
-            query = query.filter(models.Map.id == None)
+            return [] # No department assigned, return empty
             
-    maps = query.all()
+    maps = crud.get_maps_by_bank(db, current_user.bank_id, circular_id, business_vertical_name)
     
     return [
         {
@@ -226,7 +265,7 @@ def get_maps(
             "mapId": m.map_ref,
             "circularId": str(m.circular_id),
             "action": m.obligation_text,
-            "department": m.department_raw,
+            "department": m.business_vertical,
             "deadline": m.deadline_raw,
             "priority": m.priority,
             "status": m.status,
@@ -244,16 +283,12 @@ def update_map(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    db_map = db.query(models.Map).filter(models.Map.id == map_id).first()
+    db_map = crud.get_map(db, map_id)
     if not db_map:
         raise HTTPException(status_code=404, detail="Map not found")
         
     update_data = map_update.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_map, key, value)
-        
-    db.commit()
-    db.refresh(db_map)
+    crud.update_map(db, db_map, update_data)
     return {"message": "Map updated successfully", "status": db_map.status}
 
 @app.post("/api/maps/{map_id}/evidence")
@@ -263,46 +298,24 @@ def upload_evidence(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    db_map = db.query(models.Map).filter(models.Map.id == map_id).first()
+    db_map = crud.get_map(db, map_id)
     if not db_map:
         raise HTTPException(status_code=404, detail="Map not found")
         
     # Create Evidence
-    db_evidence = models.Evidence(
+    db_evidence = crud.create_evidence(
+        db=db,
         map_id=db_map.id,
         submitted_by=current_user.id,
         file_name=evidence.file_name,
         notes=evidence.notes
     )
-    db.add(db_evidence)
-    db.commit()
-    db.refresh(db_evidence)
     
     # Update map status
-    db_map.status = "under_review"
-    db.commit()
+    crud.update_map(db, db_map, {"status": "under_review"})
     
-    # Mock LLM Validation Agent response
-    # Realistically this would be queued via Celery, but we mock it inline here
-    import random
-    verdicts = ["Satisfied", "Partial", "Insufficient"]
-    reasons = [
-        "All requirements met clearly.",
-        "Missing clear definition of hardware token scope.",
-        "Document provided is unrelated to the policy requirement."
-    ]
-    mock_idx = random.randint(0, 2)
-    
-    db_validation = models.ValidationVerdict(
-        evidence_id=db_evidence.id,
-        verdict=verdicts[mock_idx],
-        confidence=random.randint(70, 99),
-        reasoning=reasons[mock_idx],
-        missing_elements=[] if mock_idx == 0 else ["Clear scope definition", "Sign-off from board"]
-    )
-    db.add(db_validation)
-    db.commit()
-    
+    # The actual Validation Agent processing will be integrated here later.
+
     return {"message": "Evidence submitted successfully"}
 
 @app.get("/api/validations")
@@ -311,13 +324,13 @@ def get_validations(
     db: Session = Depends(database.get_db)
 ):
     # Fetch MAPs that are 'under_review'
-    maps_under_review = db.query(models.Map).filter(models.Map.status == "under_review").all()
+    maps_under_review = crud.get_maps_by_status(db, "under_review")
     results = []
     
     for m in maps_under_review:
-        evidence = db.query(models.Evidence).filter(models.Evidence.map_id == m.id).order_by(models.Evidence.submitted_at.desc()).first()
+        evidence = crud.get_latest_evidence_for_map(db, m.id)
         if evidence:
-            verdict = db.query(models.ValidationVerdict).filter(models.ValidationVerdict.evidence_id == evidence.id).order_by(models.ValidationVerdict.created_at.desc()).first()
+            verdict = crud.get_latest_verdict_for_evidence(db, evidence.id)
             if verdict:
                 circ = m.circular
                 results.append({
@@ -325,7 +338,7 @@ def get_validations(
                     "mapId": m.map_ref,
                     "circularRef": circ.ref_number if circ else "",
                     "mapAction": m.obligation_text,
-                    "department": m.department_raw,
+                    "department": m.business_vertical,
                     "evidenceFile": evidence.file_name,
                     "evidenceNotes": evidence.notes,
                     "verdict": verdict.verdict,
@@ -343,22 +356,107 @@ def decide_validation(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    verdict = db.query(models.ValidationVerdict).filter(models.ValidationVerdict.id == validation_id).first()
+    verdict = crud.get_validation_verdict(db, validation_id)
     if not verdict:
         raise HTTPException(status_code=404, detail="Validation not found")
         
-    evidence = db.query(models.Evidence).filter(models.Evidence.id == verdict.evidence_id).first()
-    db_map = db.query(models.Map).filter(models.Map.id == evidence.map_id).first()
+    evidence = crud.get_evidence(db, verdict.evidence_id)
+    db_map = crud.get_map(db, evidence.map_id)
     
+    new_status = db_map.status
     if decision.action == "Confirm Close":
-        db_map.status = "closed"
+        new_status = "closed"
     elif decision.action == "Override":
-        db_map.status = "closed" # Overridden to closed
+        new_status = "closed" # Overridden to closed
     elif decision.action == "Request Resubmission":
-        db_map.status = "rework_required"
+        new_status = "rework_required"
         
-    db.commit()
+    crud.update_map(db, db_map, {"status": new_status})
     return {"message": f"Action {decision.action} recorded"}
+
+@app.get("/api/departments/stats")
+def get_departments_stats(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    maps = crud.get_maps_by_bank(db, current_user.bank_id)
+    
+    # Compute stats per vertical
+    stats = {}
+    for m in maps:
+        v = m.business_vertical or "Unassigned"
+        if v not in stats:
+            stats[v] = {"total": 0, "completed": 0, "pending": 0, "overdue": 0}
+            
+        stats[v]["total"] += 1
+        if m.status in ["closed", "verified"]:
+            stats[v]["completed"] += 1
+        elif m.status == "overdue":
+            stats[v]["overdue"] += 1
+        else:
+            stats[v]["pending"] += 1
+            
+    result = []
+    for dept, s in stats.items():
+        health = 0 if s["total"] == 0 else round((s["completed"] / s["total"]) * 100)
+        result.append({
+            "id": dept,
+            "name": dept,
+            "head": "Dept Head", # Mock head for now
+            "totalTasks": s["total"],
+            "completedTasks": s["completed"],
+            "overdueTasks": s["overdue"],
+            "pendingTasks": s["pending"],
+            "healthScore": health,
+            "tasks": [] # Not passing full tasks array for overview
+        })
+    return result
+
+@app.get("/api/audit")
+def get_audit_logs(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    logs = crud.get_audit_logs(db, current_user.bank_id)
+    return [
+        {
+            "id": str(log.id),
+            "timestamp": log.created_at.strftime("%d %b %Y, %H:%M IST"),
+            "actor": log.actor,
+            "actorRole": log.actor_role,
+            "action": log.action,
+            "actionType": log.action_type,
+            "circularRef": log.circular_ref,
+            "mapId": log.map_ref,
+            "department": log.business_vertical,
+            "details": log.details
+        } for log in logs
+    ]
+
+@app.get("/api/notifications", response_model=list[schemas.Notification])
+def get_notifications(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    if current_user.role not in ['department_user', 'department_head']:
+        return [] # Compliance officer doesn't see routing notifications as per user request
+    
+    user_dept = crud.get_business_vertical(db, current_user.business_vertical_id)
+    if not user_dept:
+        return []
+        
+    return crud.get_recent_notifications(db, current_user.bank_id, user_dept.name, days=3)
+
+@app.patch("/api/notifications/{notification_id}/read")
+def mark_notification_as_read(
+    notification_id: str,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    notification = crud.mark_notification_read(db, notification_id)
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"message": "Notification marked as read"}
 
 @app.get("/health")
 def health():

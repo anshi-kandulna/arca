@@ -40,3 +40,14 @@ class EvidenceUpload(BaseModel):
 class ValidationDecision(BaseModel):
     action: str # "Confirm Close", "Override", "Request Resubmission"
     reasoning: Optional[str] = None
+
+class Notification(BaseModel):
+    id: UUID
+    bank_id: UUID
+    business_vertical: Optional[str] = None
+    message: str
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

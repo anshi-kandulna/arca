@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
   CheckCircle, XCircle, AlertTriangle, ShieldCheck, 
-  FileText, Brain, ChevronDown, ChevronUp 
+  FileText, Brain, ChevronDown, ChevronUp, Bot 
 } from 'lucide-react';
 
 export default function ValidationSignOffPage() {
@@ -56,30 +56,34 @@ export default function ValidationSignOffPage() {
 
   return (
     <AppLayout activeRoute="/gate-2">
-      <div className="space-y-6 fade-in-up">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="space-y-8 pb-12 fade-in-up">
+        {/* Header - Editorial Layout */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between border-b-[3px] border-black pb-4 mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="gate-badge bg-primary/15 text-primary border border-primary/30 text-xs px-2 py-0.5">GATE 2</span>
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck size={16} className="text-primary" strokeWidth={3} />
+              <span className="text-[10px] font-mono font-bold text-foreground uppercase tracking-[0.2em]">GATE 2</span>
             </div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Validation Sign-Off</h1>
-            <p className="text-sm text-muted-foreground mt-1">Review AI validation of submitted evidence</p>
+            <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">Validation</h1>
+          </div>
+          <div className="mt-6 md:mt-0 flex items-center gap-4 bg-white border border-black p-3 px-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <span className="font-mono text-sm font-bold text-black uppercase tracking-widest">{validations.length} Pending Sign-Offs</span>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-muted-foreground text-sm">Loading validations…</div>
+          <div className="bg-white border border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-12 text-center">
+            <div className="w-10 h-10 border-4 border-black/20 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/60">Fetching Validations...</p>
           </div>
         ) : validations.length === 0 ? (
-          <div className="card-elevated border border-border px-6 py-12 text-center">
-            <ShieldCheck size={32} className="text-success mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-foreground mb-1">All Caught Up!</h3>
-            <p className="text-sm text-muted-foreground">No pending evidence waiting for review.</p>
+          <div className="bg-white border border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-16 text-center">
+            <ShieldCheck size={48} className="text-success mx-auto mb-4 opacity-50" />
+            <h3 className="text-2xl font-serif text-black mb-2">All Caught Up!</h3>
+            <p className="text-xs font-mono uppercase tracking-widest font-bold text-black/60">No pending evidence waiting for review.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {validations.map((v, idx) => (
               <ValidationCard key={v.id} validation={v} index={idx + 1} onDecide={(action) => handleDecision(v.id, action)} />
             ))}
@@ -93,95 +97,92 @@ export default function ValidationSignOffPage() {
 function ValidationCard({ validation, index, onDecide }: { validation: any, index: number, onDecide: (a: string) => void }) {
   const [expanded, setExpanded] = useState(true);
 
-  const vColor = validation.verdict === 'Satisfied' ? 'text-success' 
-               : validation.verdict === 'Partial' ? 'text-warning' : 'text-danger';
-  const vBg = validation.verdict === 'Satisfied' ? 'bg-success/10 border-success/20' 
-            : validation.verdict === 'Partial' ? 'bg-warning/10 border-warning/20' : 'bg-danger/10 border-danger/20';
+  const isSatisfied = validation.verdict === 'Satisfied';
+  const isPartial = validation.verdict === 'Partial';
+  
+  const vColor = isSatisfied ? 'text-success' : isPartial ? 'text-warning' : 'text-danger';
+  const vBg = isSatisfied ? 'bg-success-muted' : isPartial ? 'bg-warning-muted' : 'bg-danger-muted';
 
   return (
-    <div className={`card-elevated border border-border transition-all duration-200 overflow-hidden`}>
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-muted/20">
-        <span className="w-6 h-6 rounded-full bg-secondary border border-border flex items-center justify-center flex-shrink-0">
-          <span className="text-2xs font-bold font-mono-data text-muted-foreground">{index}</span>
-        </span>
-
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-          <span className="font-mono-data text-xs font-bold text-primary">{validation.mapId}</span>
-          <span className="text-2xs text-muted-foreground">{validation.circularRef}</span>
-          <span className={`gate-badge ${vBg} ${vColor}`}>{validation.verdict}</span>
-          <div className="flex items-center gap-1 ml-1">
-            <Brain size={11} className="text-primary" />
-            <span className={`text-2xs font-mono-data font-semibold text-primary`}>{validation.confidence}%</span>
-            <span className="text-2xs text-muted-foreground font-mono-data">confidence</span>
+    <div className={`card-elevated-hover bg-white p-0 flex flex-col stagger-${(index % 4) + 1}`}>
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 border-b border-black bg-[#fbfbfa]">
+        
+        <div className="flex items-center gap-4 flex-1 min-w-0 flex-wrap">
+          <span className="w-8 h-8 bg-black text-white flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-mono font-bold">{index}</span>
+          </span>
+          <span className="font-mono font-bold text-lg text-black">{validation.mapId}</span>
+          <span className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-widest">{validation.circularRef}</span>
+          <span className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border border-black ${vBg} ${vColor}`}>
+            VERDICT: {validation.verdict}
+          </span>
+          <div className="flex items-center gap-2 ml-2 bg-black text-white px-3 py-1">
+            <Bot size={14} className="text-primary" />
+            <span className={`text-[10px] font-mono font-bold tracking-widest uppercase`}>{validation.confidence}% CONFIDENCE</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0 mt-4 lg:mt-0">
           <button
             onClick={() => onDecide('Confirm Close')}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-success/10 border border-success/25 text-success text-xs font-medium hover:bg-success/20 transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-success text-white text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-black transition-colors border border-black"
           >
-            <CheckCircle size={12} /> Confirm Close
+            <CheckCircle size={14} /> Accept Verdict
           </button>
           
           <button
             onClick={() => onDecide('Request Resubmission')}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-danger/10 border border-danger/25 text-danger text-xs font-medium hover:bg-danger/20 transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-danger text-white text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-black transition-colors border border-black"
           >
-            <AlertTriangle size={12} /> Resubmit
+            <AlertTriangle size={14} /> Reject Evidence
           </button>
 
-          <button
-            onClick={() => onDecide('Override')}
-            className="px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground text-xs font-medium hover:text-foreground transition-all"
-          >
-            Override
-          </button>
-
-          <button onClick={() => setExpanded(!expanded)} className="p-1.5 rounded-md text-muted-foreground hover:bg-muted">
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          <button onClick={() => setExpanded(!expanded)} className="p-2 border border-black text-black hover:bg-black hover:text-white transition-colors bg-white">
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         </div>
       </div>
 
       {expanded && (
-        <div className="px-5 py-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <p className="text-2xs font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Obligation</p>
-                <p className="text-sm text-foreground leading-relaxed">{validation.mapAction}</p>
-              </div>
-              <div className="p-3 rounded-md bg-muted/40 border border-border">
-                <p className="text-2xs uppercase tracking-widest text-muted-foreground mb-1">Evidence Submitted</p>
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText size={14} className="text-primary" />
-                  <span className="text-sm font-medium text-primary cursor-pointer hover:underline">{validation.evidenceFile}</span>
+        <div className="p-0 grid grid-cols-1 md:grid-cols-2">
+          {/* Left Column */}
+          <div className="p-6 md:border-r border-black space-y-6">
+            <div>
+              <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-black/50 mb-3">Obligation to satisfy</p>
+              <p className="text-base font-sans text-black leading-relaxed p-4 border border-black/10 bg-[#fbfbfa]">{validation.mapAction}</p>
+            </div>
+            <div className="p-5 border border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-black/50 mb-4">Evidence Submitted</p>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="p-3 bg-black text-white">
+                  <FileText size={20} />
                 </div>
-                {validation.evidenceNotes && <p className="text-xs text-muted-foreground mt-2 italic">"{validation.evidenceNotes}"</p>}
+                <span className="text-sm font-mono font-bold text-black underline decoration-primary underline-offset-4 cursor-pointer hover:text-primary">{validation.evidenceFile}</span>
               </div>
+              {validation.evidenceNotes && <p className="text-sm font-sans text-black/80 mt-4 bg-[#fbfbfa] p-4 border-l-2 border-black">"{validation.evidenceNotes}"</p>}
+            </div>
+          </div>
+
+          {/* Right Column */}
+          <div className="p-6 space-y-6 bg-[#fbfbfa]">
+            <div className="p-6 border border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center gap-3 mb-4">
+                <Bot size={20} className="text-primary" />
+                <p className="text-xs font-mono font-bold text-black uppercase tracking-widest">AI Reasoning Log</p>
+              </div>
+              <p className="text-sm font-sans text-black leading-relaxed">{validation.reasoning}</p>
             </div>
 
-            <div className="space-y-4">
-              <div className="p-3 rounded-md bg-primary/5 border border-primary/15">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Brain size={14} className="text-primary" />
-                  <p className="text-xs font-semibold text-primary uppercase tracking-widest">Validation Agent Reasoning</p>
-                </div>
-                <p className="text-sm text-foreground">{validation.reasoning}</p>
+            {validation.missingElements && validation.missingElements.length > 0 && (
+              <div className="p-6 border border-danger bg-danger-muted">
+                <p className="text-[10px] font-mono font-bold text-danger uppercase tracking-[0.2em] mb-4">Missing Elements Identified</p>
+                <ul className="list-square pl-5 space-y-2">
+                  {validation.missingElements.map((el: string, i: number) => (
+                    <li key={i} className="text-sm font-sans font-medium text-danger">{el}</li>
+                  ))}
+                </ul>
               </div>
-
-              {validation.missingElements && validation.missingElements.length > 0 && (
-                <div className="p-3 rounded-md bg-danger/5 border border-danger/15">
-                  <p className="text-xs font-semibold text-danger uppercase tracking-widest mb-2">Missing Elements</p>
-                  <ul className="list-disc pl-4 space-y-1">
-                    {validation.missingElements.map((el: string, i: number) => (
-                      <li key={i} className="text-sm text-foreground">{el}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}

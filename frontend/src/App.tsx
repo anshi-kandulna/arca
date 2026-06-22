@@ -10,6 +10,7 @@ import UploadCircularPage from './pages/UploadCircularPage';
 import MyTasksPage from './pages/MyTasksPage';
 import ValidationSignOffPage from './pages/ValidationSignOffPage';
 import DepartmentHeadPortal from './pages/DepartmentHeadPortal';
+import AuditPage from './pages/AuditPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -25,6 +26,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/circulars" element={<CircularsPage />} />
+          <Route path="/audit" element={<AuditPage />} />
         </Route>
 
         {/* Compliance Officer & Admin Routes */}

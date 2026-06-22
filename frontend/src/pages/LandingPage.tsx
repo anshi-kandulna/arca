@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight } from 'lucide-react';
-import AppLogo from '@/components/ui/AppLogo';
+import { Eye, EyeOff, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function TerminalLoginPage() {
@@ -52,102 +51,115 @@ export default function TerminalLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row relative font-sans text-foreground overflow-hidden selection:bg-primary/20">
+    <div className="min-h-screen flex flex-col lg:flex-row relative bg-background text-foreground overflow-hidden">
       
-      {/* Background Glows */}
-      <div className="absolute top-0 left-0 w-[800px] h-[800px] bg-primary opacity-[0.03] rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"></div>
-      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-slate-400 opacity-[0.05] rounded-full blur-[100px] translate-x-1/3 translate-y-1/3 pointer-events-none z-0"></div>
-      <div className="absolute inset-0 bg-noise opacity-30 z-0 pointer-events-none"></div>
-
-      {/* Left Content Container */}
-      <div className="flex-1 flex flex-col px-8 lg:px-20 py-10 lg:py-12 relative z-10">
+      {/* Left Content Container - Editorial */}
+      <div className="flex-1 flex flex-col border-r-0 lg:border-r border-black relative z-10 bg-grid-pattern">
         
-        {/* Logo Top Left */}
-        <div className="flex items-center gap-3">
-          <div className="primary-glow">
-            <AppLogo size={40} />
+        {/* Header Strip */}
+        <div className="h-16 lg:h-20 border-b border-black flex items-center px-6 lg:px-12 bg-background justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary flex items-center justify-center">
+              <ShieldCheck size={20} className="text-white" />
+            </div>
+            <span className="text-2xl font-serif tracking-widest text-black uppercase">
+              ARCA
+            </span>
           </div>
-          <span className="text-[32px] font-bold tracking-tight text-gradient-primary">
-            ARCA
+          <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-foreground hidden sm:block">
+            Regulatory Intelligence Platform
           </span>
         </div>
 
         {/* Main Text Content */}
-        <div className="flex-1 flex flex-col justify-center">
-          <div className="max-w-2xl floating-element">
-            <p className="text-primary text-[11px] font-mono-data tracking-[0.25em] uppercase mb-5 font-semibold">
-              Regulatory Intelligence Platform
-            </p>
-            <h1 className="text-4xl lg:text-[3.5rem] font-bold text-foreground leading-[1.05] tracking-tight mb-8">
-              Turn regulatory obligations into <br className="hidden lg:block"/>
-              <span className="text-gradient-primary">actionable compliance</span>
+        <div className="flex-1 flex flex-col justify-center px-6 lg:px-24 py-16">
+          <div className="max-w-3xl">
+            <div className="mb-8 flex items-center gap-3 fade-in-up stagger-1">
+              <div className="w-3 h-3 bg-primary animate-pulse"></div>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-black">
+                System Status: Active
+              </span>
+            </div>
+            
+            <h1 className="text-6xl lg:text-[5.5rem] font-serif text-black leading-[0.95] tracking-tight mb-8 fade-in-up stagger-2">
+              Compliance <br />
+              <span className="text-primary italic">On Autopilot.</span>
             </h1>
-            <p className="text-muted-foreground text-base leading-relaxed max-w-xl font-mono-data">
-              ARCA automatically detects RBI circulars, extracts every obligation, routes tasks to the right departments, and verifies compliance evidence.
+            
+            <p className="text-black/70 text-lg lg:text-xl font-sans leading-relaxed max-w-xl fade-in-up stagger-3 border-l-4 border-primary pl-6 py-2">
+              ARCA automatically detects RBI circulars, extracts every obligation, routes tasks to the right departments, and verifies compliance evidence seamlessly.
             </p>
+          </div>
+        </div>
+
+        {/* Footer Strip */}
+        <div className="h-16 border-t border-black flex items-center px-6 lg:px-12 bg-background justify-between fade-in-up stagger-4">
+          <div className="text-[10px] font-mono font-bold text-black uppercase tracking-[0.1em]">
+            © 2026 Suraksha Intelligence.
+          </div>
+          <div className="text-[10px] font-mono font-bold text-black uppercase tracking-[0.1em]">
+            V. 2.4.1
           </div>
         </div>
       </div>
 
-      {/* Right Login Box */}
-      <div className="w-full lg:w-[45%] flex items-center justify-center p-8 lg:p-16 lg:pr-24 relative z-10">
-        <div className="w-full max-w-[440px] card-elevated p-8 lg:p-12 shadow-2xl backdrop-blur-sm relative">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent pointer-events-none rounded-[6px]"></div>
+      {/* Right Login Box - Brutalist */}
+      <div className="w-full lg:w-[40%] flex items-center justify-center p-6 lg:p-16 bg-background relative z-10 fade-in-up stagger-2">
+        <div className="w-full max-w-[420px] bg-white border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 lg:p-10 relative">
+          
+          <div className="mb-10 border-b-2 border-black pb-4">
+            <h2 className="text-4xl font-serif text-black mb-2">Sign In</h2>
+            <p className="text-sm font-mono text-black/60 uppercase tracking-widest font-bold">Authorized Personnel Only</p>
+          </div>
 
-          <div className="relative z-10">
-            <h2 className="text-[1.75rem] font-bold text-foreground mb-1 tracking-tight">Sign in</h2>
-            <p className="text-muted-foreground text-sm mb-8 font-mono-data">Access your compliance dashboard</p>
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-mono font-bold text-black uppercase tracking-[0.1em] block">Email Address</label>
+              <input 
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-background border-2 border-black text-black font-mono text-sm px-4 py-3 rounded-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-black/30"
+                placeholder="officer@suraksha.com"
+                required
+              />
+            </div>
 
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-2.5">
-                <label className="text-muted-foreground text-xs font-mono-data tracking-wider uppercase block">Email address</label>
+            <div className="space-y-2">
+              <label className="text-[10px] font-mono font-bold text-black uppercase tracking-[0.1em] block">Password</label>
+              <div className="relative">
                 <input 
-                  type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-input/50 border border-border text-foreground text-[15px] px-4 py-3.5 rounded-md focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50 font-mono-data"
-                  placeholder="officer@suraksha.com"
+                  type={showPassword ? "text" : "password"} 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-background border-2 border-black text-black font-mono text-sm pl-4 pr-12 py-3 rounded-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-black/30"
+                  placeholder="••••••••"
                   required
                 />
+                <button 
+                  type="button"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-black hover:text-primary transition-colors"
+                  onClick={() => setShowPassword(!showPassword)}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
+            </div>
 
-              <div className="space-y-2.5">
-                <label className="text-muted-foreground text-xs font-mono-data tracking-wider uppercase block">Passcode</label>
-                <div className="relative">
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-input/50 border border-border text-foreground text-[15px] pl-4 pr-12 py-3.5 rounded-md focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50 font-mono-data tracking-widest"
-                    placeholder="••••••••"
-                    required
-                  />
-                  <button 
-                    type="button"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-                    onClick={() => setShowPassword(!showPassword)}
-                    title={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full bg-primary text-primary-foreground font-semibold text-[15px] px-4 py-3.5 rounded-md hover:bg-primary/90 transition-all duration-200 flex items-center justify-center gap-2 mt-4 disabled:opacity-70 disabled:cursor-wait font-mono-data tracking-wider uppercase shadow-lg shadow-primary/20"
-              >
-                {loading ? (
-                  <div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin"></div>
-                ) : (
-                  <>
-                    Establish Connection <ArrowRight size={16} strokeWidth={2.5} />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-black text-white font-mono font-bold text-sm px-4 py-4 border-2 border-black hover:bg-white hover:text-black hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-between mt-8 disabled:opacity-50 disabled:cursor-wait uppercase tracking-[0.2em]"
+            >
+              <span>Authenticate</span>
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <ArrowRight size={18} strokeWidth={2.5} />
+              )}
+            </button>
+          </form>
         </div>
       </div>
 
