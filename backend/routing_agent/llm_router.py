@@ -119,8 +119,11 @@ Available Departments and Sub-Verticals (with scope):
 ──────────────────────────────────────────────────────
 {scope_block}
 ──────────────────────────────────────────────────────
-Output format must be EXACTLY this JSON (no extra keys, no markdown):
+Step 1 - Eliminate: Read each department's scope. List the departments this obligation does NOT belong to and the one-word reason (e.g. "Risk Management - hands-on implementation not governance").
+Step 2 - Select: From the remaining candidates, pick the single best sub-vertical whose scope most precisely matches the obligation.
+Step 3 - Output: Return ONLY this JSON (no extra keys, no markdown, no explanation outside the JSON):
 {{
+  "excluded_departments": "Comma-separated list of ruled-out departments and reason",
   "department": "Name of chosen department (must match exactly)",
   "sub_vertical": "Name of the most relevant sub-vertical (must match exactly)",
   "sub_vertical_scope": "The scope description of the chosen sub-vertical",
