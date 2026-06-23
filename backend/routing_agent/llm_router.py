@@ -157,3 +157,93 @@ Confidence level definitions:
                 "confidence": 0,
                 "reasoning": f"LLM Routing failed with error: {str(e)}"
             }
+
+    def route_correct(
+        self,
+        action_text: str,
+        previous_invalid_dept: str,
+        previous_invalid_sv: str,
+        candidate_taxonomy: dict,
+        error_msg: str
+    ) -> dict:
+        """
+        Runs a self-correction loop when the LLM makes an invalid assignment
+        or fails schema validation.
+        """
+        system_prompt = (
+            "You are a regulatory compliance routing expert for a commercial bank. "
+            "Your previous routing decision was invalid. Correct your assignment based on the error details.\n"
+            "Return ONLY valid JSON, nothing else. No explanation, no markdown."
+        )
+        
+        scope_block = self._build_scope_block(candidate_taxonomy)
+        
+        user_content = f"""Given this obligation: '{action_text}'
+Your previous selection was:
+- Department: '{previous_invalid_dept}'
+- Sub-vertical: '{previous_invalid_sv}'
+
+Error: {error_msg}
+
+Please correct your assignment to match ONE of the following valid departments and sub-vertical scopes (the name must match exactly):
+──────────────────────────────────────────────────────
+{scope_block}
+──────────────────────────────────────────────────────
+Output format must be EXACTLY this JSON:
+{{
+  "department": "Name of chosen department (must match exactly)",
+  "sub_vertical": "Name of the most relevant sub-vertical (must match exactly)",
+  "sub_vertical_scope": "The scope description of the chosen sub-vertical",
+  "confidence_level": "very_high | high | medium | low",
+  "reasoning": "One sentence explaining why you corrected it."
+}}
+"""
+        try:
+            response = ollama.chat(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                options={"temperature": 0}
+            )
+            raw = response["message"]["content"].strip()
+            
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                raw = "\n".join(lines).strip()
+            
+            result = json.loads(raw)
+            
+            # Case-insensitive validation of department against candidate_taxonomy
+            dept = result.get("department", "")
+            dept_names = list(candidate_taxonomy.keys())
+            if dept not in dept_names:
+                for valid_dept in dept_names:
+                    if dept.lower().strip() == valid_dept.lower().strip():
+                        result["department"] = valid_dept
+                        dept = valid_dept
+                        break
+            
+            level_to_score = {"very_high": 88, "high": 73, "medium": 52, "low": 32}
+            level = result.get("confidence_level", "medium").lower().strip()
+            confidence = level_to_score.get(level, 52)
+            
+            return {
+                "status": "success",
+                "department": result.get("department", "Unassigned"),
+                "sub_vertical": result.get("sub_vertical"),
+                "sub_vertical_scope": result.get("sub_vertical_scope"),
+                "confidence": confidence,
+                "reasoning": result.get("reasoning", "Self-corrected by agent.")
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "department": "Unassigned",
+                "sub_vertical": None,
+                "sub_vertical_scope": None,
+                "confidence": 0,
+                "reasoning": f"Self-correction failed with error: {str(e)}"
+            }

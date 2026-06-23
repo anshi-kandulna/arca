@@ -1,13 +1,15 @@
+from .rules_store import RulesStore
+
 class TaxonomyStore:
     """
-    Single source of truth for the department → sub-vertical → scope mapping.
-    Source: theme_2.xlsx (Sub-Vertical Advisory Mapping sheet)
-    No keyword matching logic — that responsibility is removed entirely.
+    Taxonomy store that loads dynamically from the RulesStore database.
+    Falls back to a default hardcoded dictionary if the database is empty.
     """
 
-    def __init__(self):
-        # Format: { "Business Vertical": { "Sub-Vertical Name": "Scope Description" } }
-        self.taxonomy = {
+    def __init__(self, rules_store: RulesStore = None):
+        self.rules_store = rules_store if rules_store else RulesStore()
+        # Baseline fallback taxonomy structure
+        self._default_taxonomy = {
             "Digital Banking Services": {
                 "Internet Banking (IB)": "Retail and corporate internet banking portals",
                 "Mobile Banking (MB)": "Mobile banking apps and services",
@@ -60,6 +62,12 @@ class TaxonomyStore:
             }
         }
 
+    @property
+    def taxonomy(self) -> dict:
+        """Dynamically fetch taxonomy from database, fall back to hardcoded default."""
+        db_tax = self.rules_store.get_taxonomy()
+        return db_tax if db_tax else self._default_taxonomy
+
     def get_all_departments(self) -> list:
         return list(self.taxonomy.keys())
 
@@ -81,3 +89,11 @@ class TaxonomyStore:
             for sv_name, sv_scope in sub_verticals.items():
                 items.append((dept, sv_name, sv_scope))
         return items
+
+    def add_sub_vertical(self, department: str, sub_vertical: str, scope: str):
+        """Adds a new sub-vertical to the taxonomy database and saves it."""
+        current = dict(self.taxonomy)
+        if department not in current:
+            current[department] = {}
+        current[department][sub_vertical] = scope
+        self.rules_store.save_taxonomy(current)

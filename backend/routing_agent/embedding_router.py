@@ -62,6 +62,11 @@ class EmbeddingRouter:
             self._scope_index.append((dept, sv_name, sv_scope, vec))
         print(f"[EmbeddingRouter] Ready. Scope embeddings cached for {len(self._scope_index)} sub-verticals.")
 
+    def reload(self):
+        """Clears the cached scope index and re-computes embeddings for all active scopes."""
+        self._scope_index = []
+        self._precompute()
+
     def _confidence(self, top_sim: float, margin: float) -> int:
         """
         Two-signal confidence score, scaled to 0–100.
@@ -89,35 +94,71 @@ class EmbeddingRouter:
 
         Returns:
           {
-            "department":   str | "Unassigned",
+            "department":   str,     # winning department
+            "sub_vertical":  str,     # winning sub-vertical
             "top_sim":      float,   # cosine similarity of winning match
-            "margin":       float,   # gap between winner and runner-up
+            "margin":       float,   # gap between winner and runner-up in a different department
             "confidence":   int,     # 0–100 composite confidence score
             "flagged":      bool,    # True if confidence is below assign threshold
-            "dept_scores":  dict     # top 3 dept → cosine score (for transparency)
+            "dept_scores":  dict,    # dept → max cosine score (for backward compatibility)
+            "ranked_sub_verticals": list # sorted list of sub-vertical matches
           }
         """
         action_vec = self._embed(action_text)
 
-        # Aggregate cosine similarity per department: take MAX across sub-verticals
-        dept_max: dict = defaultdict(float)
+        sv_scores = []
         for dept, sv_name, sv_scope, sv_vec in self._scope_index:
             sim = self._cosine(action_vec, sv_vec)
-            if sim > dept_max[dept]:
-                dept_max[dept] = sim
+            sv_scores.append({
+                "department": dept,
+                "sub_vertical": sv_name,
+                "scope": sv_scope,
+                "similarity": sim
+            })
 
-        sorted_depts = sorted(dept_max.items(), key=lambda x: -x[1])
-        winning_dept, top_sim = sorted_depts[0]
-        second_sim = sorted_depts[1][1] if len(sorted_depts) > 1 else 0.0
+        # Sort sub-verticals by descending similarity
+        sv_scores = sorted(sv_scores, key=lambda x: -x["similarity"])
+        top_sv = sv_scores[0]
+        winning_dept = top_sv["department"]
+        winning_sv = top_sv["sub_vertical"]
+        top_sim = top_sv["similarity"]
+
+        # Calculate margin as the gap between the winning sub-vertical and the
+        # highest scoring sub-vertical belonging to a DIFFERENT department.
+        second_sim = 0.0
+        for sv in sv_scores:
+            if sv["department"] != winning_dept:
+                second_sim = sv["similarity"]
+                break
         margin = top_sim - second_sim
 
         embed_conf = self._confidence(top_sim, margin)
 
+        # Aggregate max similarity per department for backward compatibility and hybrid calibration
+        dept_max = defaultdict(float)
+        for sv in sv_scores:
+            d = sv["department"]
+            s = sv["similarity"]
+            if s > dept_max[d]:
+                dept_max[d] = s
+
+        sorted_depts = sorted(dept_max.items(), key=lambda x: -x[1])
+
         return {
             "department": winning_dept,
+            "sub_vertical": winning_sv,
             "top_sim": round(top_sim, 4),
             "margin": round(margin, 4),
             "confidence": embed_conf,
             "flagged": embed_conf < 70,
-            "dept_scores": {d: round(s, 4) for d, s in sorted_depts}
+            "dept_scores": {d: round(s, 4) for d, s in sorted_depts},
+            "ranked_sub_verticals": [
+                {
+                    "department": sv["department"],
+                    "sub_vertical": sv["sub_vertical"],
+                    "scope": sv["scope"],
+                    "similarity": round(sv["similarity"], 4)
+                }
+                for sv in sv_scores
+            ]
         }

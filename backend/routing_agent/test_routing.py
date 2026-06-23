@@ -1,62 +1,82 @@
-import sys
 import os
+import sys
 
-# Add parent directory to sys.path so we can import routing_agent
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Setup paths to import routing_agent modules safely
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir in sys.path:
+    sys.path.remove(script_dir)
+sys.path.insert(0, os.path.abspath(os.path.join(script_dir, "..")))
 
-from routing_agent import RoutingAgent
+from routing_agent.routing_agent import RoutingAgent
 
-def run_tests():
-    print("Initializing RoutingAgent...")
-    agent = RoutingAgent(ollama_model="llama3.2:latest")
+def run_standard_routing_tests():
+    print("======================================================================")
+    print("Starting Standard Routing Agent Evaluation Test")
+    print("======================================================================\n")
 
-    # Test cases that should trigger Stage 1 (Keyword Matcher)
-    test_cases_stage1 = [
+    # Initialize the Routing Agent with standard database and model settings
+    # This will load the standard taxonomy and baseline rules
+    print("Initializing RoutingAgent (this embeds the taxonomy scopes)...")
+    agent = RoutingAgent(
+        ollama_model="llama3.2:latest",
+        embedding_model="mxbai-embed-large:latest"
+    )
+    print("Agent initialized successfully.\n")
+
+    # Define standard bank compliance test obligations.
+    # These actions do not contain deterministic guardrail patterns ("FEMA compliance", "KYC verification").
+    test_obligations = [
         {
-            "action": "Ensure that UPI transactions are processed within NPIC limits and daily reconciliation is done.",
-            "expected_dept": "Payments Vertical"
+            "action": "Establish security log analysis procedures for all external-facing banking applications.",
+            "clause_ref": "Para 4.1",
+            "priority": "HIGH"
         },
         {
-            "action": "Submit the annual AML / CFT assessment report to the Financial Intelligence Unit.",
-            "expected_dept": "Compliance Department"
+            "action": "Maintain records of credit card billing disputes and resolve them within 30 days.",
+            "clause_ref": "Para 7.2.3",
+            "priority": "MEDIUM"
         },
         {
-            "action": "Establish a board-approved Cybersecurity Policy and implement a Security Operations Center.",
-            # This has keywords for Cybersecurity Wing (Cybersecurity, Security Operations Center),
-            # but also "board-approved" (Board). It might be ambiguous or direct. Let's see how keyword matcher handles it.
-        }
-    ]
-
-    print("\n--- Running Stage 1: Keyword Matcher Tests ---")
-    for tc in test_cases_stage1:
-        print(f"\nRouting action: '{tc['action']}'")
-        res = agent.route_map(tc)
-        print(f"Result:")
-        print(f"  Assigned Department: {res['assigned_department']}")
-        print(f"  Confidence: {res['confidence']}%")
-        print(f"  Source: {res['routing_source']}")
-        print(f"  Reasoning: {res['reasoning']}")
-
-    # Test case that is ambiguous and should trigger Stage 2 (LLM Router)
-    test_cases_stage2 = [
-        {
-            "action": "Evaluate the risk and potential cost trade-offs regarding outsourcing core systems hosting to a vendor and report to the board.",
-            # This contains 'risk' (Risk Management), 'outsourcing' (Procurement & Vendor Management), 'hosting' (IT Vertical), and 'board' (Internal Audit / Board).
-            # It will likely trigger Stage 2 (Local LLM Router) because of keyword ambiguity or low threshold.
-            "clause_ref": "Para 3.2, Outsourcing",
+            "action": "Conduct a comprehensive risk assessment of cloud storage services used for customer records.",
+            "clause_ref": "Section 9",
             "priority": "HIGH"
         }
     ]
 
-    print("\n--- Running Stage 2: Local LLM Disambiguation Tests ---")
-    for tc in test_cases_stage2:
-        print(f"\nRouting action: '{tc['action']}'")
+    for idx, tc in enumerate(test_obligations, 1):
+        print(f"----------------------------------------------------------------------")
+        print(f"Test Obligation #{idx}")
+        print(f"----------------------------------------------------------------------")
+        print(f"Action Text:  '{tc['action']}'")
+        print(f"Clause Ref:   {tc['clause_ref']}")
+        print(f"Priority:     {tc['priority']}")
+        print("Routing...")
+        
+        # Route through the agent
         res = agent.route_map(tc)
-        print(f"Result:")
+        
+        print("\nRouting Results:")
         print(f"  Assigned Department: {res['assigned_department']}")
-        print(f"  Confidence: {res['confidence']}%")
-        print(f"  Source: {res['routing_source']}")
-        print(f"  Reasoning: {res['reasoning']}")
+        print(f"  Sub-Vertical:        {res['sub_vertical']}")
+        print(f"  Scope Match:         {res['sub_vertical_scope']}")
+        print(f"  Calibrated Score:    {res['confidence']}%")
+        print(f"  Routing Source:      {res['routing_source']}")
+        print(f"  Flagged for Review:  {res['routing_flagged']}")
+        print(f"  Reasoning:           {res['reasoning']}")
+        
+        print("\nProposed Candidates (Dropdown options):")
+        for cand in res.get("proposed_candidates", []):
+            print(f"  - {cand['department']} / {cand['sub_vertical']} (Conf: {cand['confidence']}%, Source: {cand['source']})")
+            
+        print("\nAudit Decision Trace:")
+        trace = res.get("routing_trace", {})
+        print(f"  - Guardrail Triggered:      {trace.get('guardrail_triggered')}")
+        print(f"  - Few-Shot Rules Retrieved: {len(trace.get('retrieved_rules', []))}")
+        for r in trace.get("retrieved_rules", []):
+            print(f"    * Matched Past Action: '{r['action'][:60]}...' -> {r['department']}")
+        print(f"  - Self-Correction Retries:  {trace.get('self_correction_attempts')}")
+        print(f"  - Format Validation Errors: {trace.get('validation_errors')}")
+        print()
 
 if __name__ == "__main__":
-    run_tests()
+    run_standard_routing_tests()

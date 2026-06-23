@@ -1,8 +1,10 @@
 try:
+    from .rules_store import RulesStore
     from .taxonomy_store import TaxonomyStore
     from .llm_router import LLMRouter
     from .embedding_router import EmbeddingRouter
 except ImportError:
+    from routing_agent.rules_store import RulesStore
     from routing_agent.taxonomy_store import TaxonomyStore
     from routing_agent.llm_router import LLMRouter
     from routing_agent.embedding_router import EmbeddingRouter
@@ -10,39 +12,28 @@ except ImportError:
 
 class RoutingAgent:
     """
-    Two-stage MAP routing pipeline with candidate pre-filtering and hybrid calibration:
-
-    Stage 1 - Candidate Pre-filtering + LLM Router
-      1. Run action through EmbeddingRouter to rank all departments based on
-         sub-vertical scope similarity.
-      2. Narrow choice pool to only the TOP 3 candidate departments.
-      3. Call LLM Router passing only those 3 candidates (speeds up prompt,
-         prevents hallucination to irrelevant departments).
-      4. If LLM assigns a candidate with confidence >= HIGH_THRESHOLD:
-         Calculate the HYBRID confidence score (combining LLM self-score with
-         embedding similarity of the chosen department).
-         - Hybrid score >= 70 -> Confident assignment (flagged = False)
-         - Hybrid score < 70 -> Proposed assignment (flagged = True)
-
-    Stage 2 - Embedding Similarity Fallback (under-confident LLM)
-      1. If LLM is uncertain, use the best matched department from the embedding search.
-      2. Embedding score >= 70 -> Confident assignment (flagged = False)
-      3. Embedding score < 70 -> Proposed assignment (flagged = True)
-
-    No assignments are set to "Unassigned" automatically; the system always proposes
-    the best semantic guess and flags low-confidence ones for human verification.
+    Production-grade Routing Agent featuring:
+      1. Deterministic Guardrails Overrides (Regex/Keyword substring pattern matches)
+      2. Dynamic context-aware Few-Shot Routing Rules retrieval (semantic search)
+      3. Granular Sub-Vertical Pre-Filtering (top 6 candidates)
+      4. Calibration favoring LLM reasoning (65/35 weight ratio)
+      5. Generative Self-Correction Retry Loop
+      6. Explainability Auditing (Decision Tracing)
+      7. Dynamic Feedback Loop write-back (adding rules & runtime sub-verticals)
     """
 
-    LLM_HIGH_THRESHOLD  = 73   # very_high(88) or high(73) -> accept LLM result
+    LLM_ACCEPT_THRESHOLD = 52   # medium (52) or higher (73, 88) -> accept LLM result
 
     def __init__(
         self,
         ollama_model: str = "llama3.2:latest",
-        embedding_model: str = "mxbai-embed-large:latest"
+        embedding_model: str = "mxbai-embed-large:latest",
+        db_path: str = None
     ):
-        self.taxonomy = TaxonomyStore()
+        self.rules_store = RulesStore(db_path=db_path)
+        self.taxonomy = TaxonomyStore(rules_store=self.rules_store)
         self.llm = LLMRouter(model_name=ollama_model)
-        # EmbeddingRouter pre-computes 30 scope embeddings at init (~3 s one-time cost)
+        # EmbeddingRouter pre-computes scope embeddings at init
         self.embedder = EmbeddingRouter(
             taxonomy_store=self.taxonomy,
             embedding_model=embedding_model
@@ -54,72 +45,247 @@ class RoutingAgent:
 
     def route_map(self, map_data: dict, feedback_examples: list = None) -> dict:
         """
-        Routes a single MAP dict through the two-stage filtered pipeline.
+        Routes a single MAP dict through the production-grade pipeline.
         Expected MAP keys: action, clause_ref (opt), deadline_raw (opt), priority (opt).
         """
-        action    = map_data.get("action", "")
-        clause_ref= map_data.get("clause_ref", "")
-        deadline  = map_data.get("deadline_raw", "")
-        priority  = map_data.get("priority", "")
+        action     = map_data.get("action", "")
+        clause_ref = map_data.get("clause_ref", "")
+        deadline   = map_data.get("deadline_raw", "")
+        priority   = map_data.get("priority", "")
 
-        # --- Step 1: Pre-Filter candidates using Embedding Similarity ---
-        # Find the top 3 departments based on sub-vertical scope similarity
+        # Initialize audit trace logs
+        trace = {
+            "guardrail_triggered": False,
+            "retrieved_rules": [],
+            "self_correction_attempts": 0,
+            "validation_errors": []
+        }
+
+        # --- Step 1: Check Deterministic Guardrail Overrides ---
+        guardrail = self.rules_store.find_matching_guardrail(action)
+        if guardrail:
+            trace["guardrail_triggered"] = True
+            
+            proposed_candidates = [
+                {
+                    "department": guardrail["department"],
+                    "sub_vertical": guardrail["sub_vertical"],
+                    "confidence": 100,
+                    "source": "Deterministic Guardrail Override"
+                }
+            ]
+            
+            return self._build_result(
+                action              = action,
+                department          = guardrail["department"],
+                sub_vertical        = guardrail["sub_vertical"],
+                sub_vertical_scope  = self.taxonomy.taxonomy.get(guardrail["department"], {}).get(guardrail["sub_vertical"], ""),
+                confidence          = 100,
+                reasoning           = guardrail["reasoning"],
+                routing_source      = "Deterministic Guardrail Override",
+                flagged             = False,
+                proposed_candidates = proposed_candidates,
+                routing_trace       = trace,
+                map_data            = map_data
+            )
+
+        # --- Step 2: Pre-Filter candidates using Embedding Similarity at Sub-Vertical Level ---
         embed_result = self.embedder.route(action)
-        top_depts = list(embed_result["dept_scores"].keys())[:3]
+        ranked_svs = embed_result["ranked_sub_verticals"]
         
-        # Get scope definitions for only these top 3 candidates
-        filtered_taxonomy = self.taxonomy.get_taxonomy_for_llm(top_depts)
+        # Select the top 6 sub-verticals
+        TOP_K_SVS = 6
+        candidate_svs = ranked_svs[:TOP_K_SVS]
+        
+        # Build candidate_taxonomy: format { dept_name: { sub_vertical_name: scope_description } }
+        candidate_taxonomy = {}
+        candidate_sv_names = set()
+        for sv in candidate_svs:
+            dept = sv["department"]
+            sv_name = sv["sub_vertical"]
+            scope = sv["scope"]
+            
+            if dept not in candidate_taxonomy:
+                candidate_taxonomy[dept] = {}
+            candidate_taxonomy[dept][sv_name] = scope
+            candidate_sv_names.add(sv_name)
 
-        # --- Step 2: LLM Router with filtered taxonomy ---
+        # --- Step 3: Retrieve contextually similar active routing rules (few-shots) ---
+        if feedback_examples is None:
+            # Query the database for past resolved cases matching this action
+            retrieved_rules = self.rules_store.find_similar_rules(
+                action=action,
+                embedder_func=self.embedder._embed,
+                top_n=2,
+                min_similarity=0.65
+            )
+            feedback_examples = retrieved_rules
+            trace["retrieved_rules"] = [
+                {
+                    "action": r["action"],
+                    "department": r["department"],
+                    "sub_vertical": r["sub_vertical"],
+                    "reasoning": r["reasoning"]
+                }
+                for r in retrieved_rules
+            ]
+
+        # --- Step 4: LLM Router with filtered sub-vertical taxonomy ---
         llm_result = self.llm.route(
             action_text=action,
-            candidate_taxonomy=filtered_taxonomy,
+            candidate_taxonomy=candidate_taxonomy,
             clause_ref=clause_ref,
             deadline=deadline,
             priority=priority,
             feedback_examples=feedback_examples
         )
 
-        # Stage 1: Confident LLM routing
-        if llm_result["confidence"] >= self.LLM_HIGH_THRESHOLD and llm_result["department"] in top_depts:
-            assigned_dept = llm_result["department"]
+        llm_dept = llm_result.get("department", "Unassigned")
+        llm_sv = llm_result.get("sub_vertical")
+        
+        # Validate LLM output against candidate set
+        is_valid = (
+            llm_dept in candidate_taxonomy and 
+            llm_sv in candidate_sv_names
+        )
+
+        # --- Step 5: Generative Self-Correction Loop ---
+        if not is_valid and llm_dept != "Unassigned":
+            trace["self_correction_attempts"] += 1
+            error_msg = f"Chosen sub-vertical '{llm_sv}' or department '{llm_dept}' is not in the allowed candidate set."
+            trace["validation_errors"].append(error_msg)
+            
+            # Reprompt the LLM to correct itself
+            corrected_result = self.llm.route_correct(
+                action_text=action,
+                previous_invalid_dept=llm_dept,
+                previous_invalid_sv=llm_sv,
+                candidate_taxonomy=candidate_taxonomy,
+                error_msg=error_msg
+            )
+            
+            if corrected_result.get("status") == "success":
+                corr_dept = corrected_result.get("department", "Unassigned")
+                corr_sv = corrected_result.get("sub_vertical")
+                if corr_dept in candidate_taxonomy and corr_sv in candidate_sv_names:
+                    # Self-correction succeeded! Overwrite LLM result.
+                    llm_result = corrected_result
+                    llm_dept = corr_dept
+                    llm_sv = corr_sv
+                    is_valid = True
+
+        # Stage 1: Confident LLM routing (retains medium and high confidence)
+        if (is_valid and llm_result["confidence"] >= self.LLM_ACCEPT_THRESHOLD):
             hybrid_conf = self._calculate_hybrid_confidence(
-                assigned_dept = assigned_dept,
+                assigned_dept = llm_dept,
                 llm_conf      = llm_result["confidence"],
                 embed_result  = embed_result
             )
             
             flagged = hybrid_conf < 70
             
+            proposed_candidates = self._build_proposed_candidates(
+                primary_dept=llm_dept,
+                primary_sv=llm_sv,
+                primary_conf=hybrid_conf,
+                primary_source="LLM Router (Stage 1)",
+                embed_result=embed_result
+            )
+            
             return self._build_result(
-                action         = action,
-                department     = assigned_dept,
-                confidence     = hybrid_conf,
-                reasoning      = llm_result["reasoning"],
-                routing_source = f"LLM Router (Stage 1) [filtered: {', '.join(top_depts)}]",
-                flagged        = flagged,
-                map_data       = map_data
+                action              = action,
+                department          = llm_dept,
+                sub_vertical        = llm_sv,
+                sub_vertical_scope  = llm_result.get("sub_vertical_scope"),
+                confidence          = hybrid_conf,
+                reasoning           = llm_result["reasoning"],
+                routing_source      = "LLM Router (Stage 1)" if not flagged else "LLM Router (Stage 1) [flagged]",
+                flagged             = flagged,
+                proposed_candidates = proposed_candidates,
+                routing_trace       = trace,
+                map_data            = map_data
             )
 
-        # Stage 2: Embedding similarity fallback (when LLM is under-confident)
+        # Stage 2: Embedding similarity fallback
         embed_conf = embed_result["confidence"]
         embed_dept = embed_result["department"]
-        flagged = embed_conf < 70
+        embed_sv   = embed_result["sub_vertical"]
+        
+        # Find scope of the winning sub-vertical
+        embed_sv_scope = ""
+        for sv in ranked_svs:
+            if sv["department"] == embed_dept and sv["sub_vertical"] == embed_sv:
+                embed_sv_scope = sv["scope"]
+                break
+                
+        flagged = True # fallback routing is always flagged
 
         reasoning = (
-            f"LLM uncertain (conf {llm_result['confidence']}%); "
-            f"embedding suggested '{embed_dept}' "
+            f"LLM uncertain/invalid (conf {llm_result.get('confidence', 0)}%); "
+            f"embedding suggested '{embed_dept} / {embed_sv}' "
             f"(top_sim={embed_result['top_sim']}, margin={embed_result['margin']})."
         )
-        return self._build_result(
-            action         = action,
-            department     = embed_dept,
-            confidence     = embed_conf,
-            reasoning      = reasoning,
-            routing_source = "Embedding Similarity (Stage 2 Fallback)" if not flagged else "Embedding Similarity (Stage 2 Fallback) [flagged]",
-            flagged        = flagged,
-            map_data       = map_data
+        
+        proposed_candidates = self._build_proposed_candidates(
+            primary_dept=embed_dept,
+            primary_sv=embed_sv,
+            primary_conf=embed_conf,
+            primary_source="Embedding Similarity (Stage 2 Fallback)",
+            embed_result=embed_result
         )
+        
+        return self._build_result(
+            action              = action,
+            department          = embed_dept,
+            sub_vertical        = embed_sv,
+            sub_vertical_scope  = embed_sv_scope,
+            confidence          = embed_conf,
+            reasoning           = reasoning,
+            routing_source      = "Embedding Similarity (Stage 2 Fallback)",
+            flagged             = flagged,
+            proposed_candidates = proposed_candidates,
+            routing_trace       = trace,
+            map_data            = map_data
+        )
+
+    # --------------------------------------------------------------------------
+    # Feedback Loop API
+    # --------------------------------------------------------------------------
+
+    def resolve_ambiguous_case(
+        self,
+        action: str,
+        assigned_dept: str,
+        assigned_sub_vertical: str,
+        scope: str = None,
+        reasoning: str = "Resolved by human verification."
+    ):
+        """
+        Feedback loop API to save manual resolution.
+        If a new sub-vertical is provided, updates the taxonomy.
+        Saves resolved action mapping to rules database and re-computes embeddings.
+        """
+        # 1. Update taxonomy if sub-vertical is new
+        taxonomy = self.taxonomy.taxonomy
+        if assigned_dept not in taxonomy or assigned_sub_vertical not in taxonomy.get(assigned_dept, {}):
+            if not scope:
+                scope = f"Scope for {assigned_sub_vertical}"
+            self.taxonomy.add_sub_vertical(assigned_dept, assigned_sub_vertical, scope)
+            # Recompute embeddings cache dynamically for new scope
+            self.embedder.reload()
+            
+        # 2. Compute embedding for the action to cache it in the rule
+        action_embed = self.embedder._embed(action)
+        
+        # 3. Add to rules database (handles locking and atomic saving)
+        self.rules_store.add_rule(
+            action=action,
+            department=assigned_dept,
+            sub_vertical=assigned_sub_vertical,
+            reasoning=reasoning,
+            embedding=action_embed
+        )
+        print(f"[Feedback Loop] Successfully recorded resolved case for action: '{action[:50]}...' -> {assigned_dept} / {assigned_sub_vertical}")
 
     # --------------------------------------------------------------------------
     # Helpers
@@ -127,10 +293,9 @@ class RoutingAgent:
 
     def _calculate_hybrid_confidence(self, assigned_dept: str, llm_conf: int, embed_result: dict) -> int:
         """
-        Calculates the hybrid calibrated confidence score for a department.
-        Combines the LLM categorical confidence with the embedding similarity metric.
-        If there is a mismatch (LLM chose different from embedding top choice),
-        the margin becomes negative, penalizing the clarity and lowering the final score.
+        Calculates the hybrid calibrated confidence score.
+        Combines LLM confidence with the embedding similarity metric.
+        Favors LLM reasoning (65% LLM weight, 35% Embedding weight).
         """
         sim_dept = embed_result["dept_scores"].get(assigned_dept, 0.0)
         
@@ -155,18 +320,68 @@ class RoutingAgent:
         embed_component = round((0.55 * strength + 0.45 * clarity) * 100)
         embed_component = max(0, min(100, embed_component))
         
-        # 4. Hybrid combination (40% LLM weight, 60% Embedding weight)
-        hybrid_conf = round(0.40 * llm_conf + 0.60 * embed_component)
+        # 4. Hybrid combination (65% LLM weight, 35% Embedding weight)
+        hybrid_conf = round(0.65 * llm_conf + 0.35 * embed_component)
         return max(0, min(100, hybrid_conf))
+
+    def _build_proposed_candidates(
+        self,
+        primary_dept: str,
+        primary_sv: str,
+        primary_conf: int,
+        primary_source: str,
+        embed_result: dict
+    ) -> list:
+        """
+        Constructs the list of department/sub-vertical options for human-in-the-loop dropdown review.
+        The first element is the primary proposed option. The rest are alternative embedding matches.
+        """
+        candidates = [
+            {
+                "department": primary_dept,
+                "sub_vertical": primary_sv,
+                "confidence": primary_conf,
+                "source": primary_source
+            }
+        ]
+        
+        seen = {(primary_dept, primary_sv)}
+        
+        # Add next best sub-vertical matches from the embedding router
+        for sv in embed_result.get("ranked_sub_verticals", []):
+            dept = sv["department"]
+            sv_name = sv["sub_vertical"]
+            
+            if (dept, sv_name) not in seen:
+                seen.add((dept, sv_name))
+                # Scale absolute similarity of alternatives to a 0-100 score
+                sim = sv["similarity"]
+                sim_conf = round(max(0.0, min(1.0, (sim - 0.40) / 0.50)) * 100)
+                
+                candidates.append({
+                    "department": dept,
+                    "sub_vertical": sv_name,
+                    "confidence": sim_conf,
+                    "source": "Embedding Similarity (Alternative)"
+                })
+                
+            if len(candidates) >= 3:
+                break
+                
+        return candidates
 
     def _build_result(
         self,
         action: str,
         department: str,
+        sub_vertical: str,
+        sub_vertical_scope: str,
         confidence: int,
         reasoning: str,
         routing_source: str,
         flagged: bool,
+        proposed_candidates: list,
+        routing_trace: dict,
         map_data: dict
     ) -> dict:
         notification_sent = False
@@ -176,17 +391,20 @@ class RoutingAgent:
         return {
             "action":              action,
             "assigned_department": department,
+            "sub_vertical":        sub_vertical,
+            "sub_vertical_scope":  sub_vertical_scope,
             "confidence":          confidence,
             "reasoning":           reasoning,
             "routing_source":      routing_source,
             "routing_flagged":     flagged,
+            "proposed_candidates": proposed_candidates,
+            "routing_trace":       routing_trace,
             "notification_sent":   notification_sent
         }
 
     def _dispatch_notification(self, department: str, map_data: dict) -> bool:
         """
         Mocks a department notification.
-        In production: triggers email (Resend API) or WebSocket event to frontend.
         """
         print(
             f"[NOTIFICATION] -> '{department}' | "

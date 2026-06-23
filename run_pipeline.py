@@ -42,6 +42,8 @@ def run_routing_phase(input_json_path, output_json_path, ollama_model="llama3.2:
         m["routing_reasoning"] = res["reasoning"]
         m["routing_source"] = res["routing_source"]
         m["routing_flagged"] = res.get("routing_flagged", False)
+        m["proposed_candidates"] = res.get("proposed_candidates", [])
+        m["routing_trace"] = res.get("routing_trace", {})
 
         dept_summary[res["assigned_department"]] += 1
         if res.get("sub_vertical"):
