@@ -1,8 +1,29 @@
 import os
 import json
-import fcntl
+import sys
 import tempfile
 from collections import defaultdict
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
+def _lock_file(f):
+    if sys.platform == "win32":
+        pos = f.tell()
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        f.seek(pos)
+    else:
+        fcntl.flock(f, fcntl.LOCK_EX)
+def _unlock_file(f):
+    if sys.platform == "win32":
+        pos = f.tell()
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        f.seek(pos)
+    else:
+        fcntl.flock(f, fcntl.LOCK_UN)
 
 class RulesStore:
     """
@@ -125,12 +146,12 @@ class RulesStore:
         with open(self.db_path, "r", encoding="utf-8") as f:
             try:
                 # Exclusive lock for safe reading/writing sequence
-                fcntl.flock(f, fcntl.LOCK_EX)
+                _lock_file(f)
                 return json.load(f)
             except Exception:
                 return {"taxonomy": {}, "rules": [], "guardrails": []}
             finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+                _unlock_file(f)
 
     def _save_raw(self, data: dict):
         """Saves data to JSON file atomically using a tempfile and rename, with file locking."""
@@ -142,7 +163,7 @@ class RulesStore:
         lock_file_path = self.db_path + ".lock"
         with open(lock_file_path, "w") as lock_f:
             try:
-                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                _lock_file(lock_f)
                 
                 # Write to temporary file in the same directory (necessary for atomic atomic rename)
                 with tempfile.NamedTemporaryFile("w", dir=dir_name, delete=False, encoding="utf-8", suffix=".tmp") as temp_f:
@@ -152,7 +173,7 @@ class RulesStore:
                 # Replace the old file atomically
                 os.replace(temp_f_path, self.db_path)
             finally:
-                fcntl.flock(lock_f, fcntl.LOCK_UN)
+                _unlock_file(lock_f)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Public APIs

@@ -95,10 +95,10 @@ export default function TerminalLoginPage() {
         {/* Footer Strip */}
         <div className="h-16 border-t border-black flex items-center px-6 lg:px-12 bg-background justify-between fade-in-up stagger-4">
           <div className="text-[10px] font-mono font-bold text-black uppercase tracking-[0.1em]">
-            © 2026 Suraksha Intelligence.
+            © 2026 ARCA Intelligence.
           </div>
           <div className="text-[10px] font-mono font-bold text-black uppercase tracking-[0.1em]">
-            V. 2.4.1
+            V. 1.0.0
           </div>
         </div>
       </div>

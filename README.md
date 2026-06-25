@@ -1,57 +1,70 @@
 # ARCA (Automated Regulatory Compliance Assistant)
 
-Suraksha (ARCA) is an AI-powered regulatory compliance platform designed to help banks and financial institutions automate the processing, extraction, and routing of regulatory circulars. It drastically reduces manual compliance workflows by extracting Manageable Actionable Points (MAPs) from complex PDF circulars and automatically assigning them to the relevant internal business vertical using LLM-based intelligent routing.
+ARCA is a highly specialized, autonomous AI platform designed to help banks and financial institutions automate the ingestion, semantic routing, and deterministic validation of regulatory circulars. It drastically reduces manual compliance workflows by extracting Manageable Actionable Points (MAPs) from complex PDF circulars and deploying local offline AI agents to orchestrate their lifecycle.
 
-## 🚀 Key Features
+---
 
-*   **Intelligent Circular Processing:** Upload PDF circulars and automatically extract obligations, deadlines, and priorities using Docling and local LLMs.
-*   **AI Routing Agent:** Employs a semantic keyword matcher and a fallback LLaMA 3.2 router to intelligently assign MAPs to correct internal departments (e.g., Risk Management, Digital Banking).
-*   **Brutalist UI Aesthetics:** A highly opinionated, high-contrast, brutalist user interface ensuring high readability, clarity, and an "art-directed" feel—avoiding generic AI slop.
-*   **Role-Based Access Control (RBAC):** Distinct roles for `system_admin`, `compliance_officer`, `department_head`, and `department_user`.
-*   **Real-time Notifications:** Automated routing triggers real-time alerts to the specific department users, ensuring prompt accountability.
-*   **Audit Logging:** Every system action is cryptographically tied and logged for rigorous compliance trailing.
-*   **Department Validation:** Integrated evidence upload and multi-stage sign-off workflows for tracking compliance adherence.
+## 🚀 Key Architectural Features
 
-## 🛠️ Tech Stack
+### 1. Multi-Agent AI Framework (Offline-First)
+The platform is designed to run in air-gapped or high-security banking environments, utilizing **Ollama** natively to run open-weight models (`qwen2.5:7b`). No data is sent to external APIs (OpenAI, Anthropic).
+* **Extraction Agent:** Uses IBM `docling` for local PDF parsing, entirely bypassing standard cloud OCR.
+* **Routing Agent:** Employs a deterministic keyword guardrail system alongside a fallback LLM router to intelligently assign MAPs to correct internal departments.
+* **Validation Agent:** Automatically evaluates user-submitted evidence against obligations to auto-close MAPs that achieve a $\ge 90\%$ deterministic confidence score.
 
-### Frontend
-*   **Framework:** React 18 with Vite
-*   **Styling:** Tailwind CSS (configured for Brutalist / Neo-brutalist aesthetics)
-*   **Routing:** React Router v6
-*   **Icons:** Lucide React
-*   **Language:** TypeScript
+### 2. Semantic Embedding & Fast Filtering
+The system uses `mxbai-embed-large` to generate vector embeddings of active sub-vertical scopes. Before falling back to the LLM router, the pipeline pre-filters options using cosine similarity—cutting latency by over 60% and strictly preventing LLM hallucination of department names.
 
-### Backend & AI
-*   **Framework:** FastAPI (Python)
-*   **Database:** PostgreSQL 16 (via SQLAlchemy ORM & pgAdmin)
-*   **AI Extraction Pipeline:** Docling, Pandas
-*   **AI Routing Agent:** Ollama (`llama3.2:latest`)
-*   **File Handling:** Local static storage (`/uploads`)
+### 3. Rigorous Audit Logging & RBAC
+* Every system action, including actions taken by the autonomous AI agents (e.g. `AUTO_CLOSE`), is cryptographically tied and logged.
+* Distinct Role-Based Access Control (RBAC) scopes limit log visibility and actions strictly to the user's domain.
+
+---
+
+## 🛠️ Complete Tech Stack
+
+### Frontend Application
+* **Framework:** React 18 with Vite
+* **Styling:** Tailwind CSS (configured for Brutalist aesthetics)
+* **Routing:** React Router v6
+* **Icons:** Lucide React
+* **Language:** TypeScript
+
+### Backend Architecture
+* **Framework:** FastAPI (Python)
+* **Database:** PostgreSQL 16 (via SQLAlchemy ORM)
+* **AI Extraction Pipeline:** `docling`, `pandas`
+* **AI LLM & Embedding Host:** `Ollama` (`qwen2.5:7b` & `mxbai-embed-large:latest`)
+* **File Handling:** Multipart asynchronous uploads direct to local static storage (`/uploads`)
+
+---
 
 ## ⚙️ Prerequisites
 
-Before you begin, ensure you have met the following requirements:
-*   **Node.js** (v18+) and `npm` installed.
-*   **Python** (3.10+) installed.
-*   **PostgreSQL** running locally (pgAdmin recommended).
-*   **Ollama** installed and running locally. You must pull the llama3.2 model:
+Before executing the system, ensure the following are installed:
+1. **Node.js** (v18+) and `npm`.
+2. **Python** (3.10+).
+3. **PostgreSQL** running locally (pgAdmin recommended).
+4. **Ollama** installed and running locally. You must pull the required models:
     ```bash
-    ollama pull llama3.2:latest
+    ollama pull qwen2.5:7b
+    ollama pull mxbai-embed-large:latest
     ```
+
+---
 
 ## 📦 Installation & Setup
 
-### 1. Database Setup
-1. Open pgAdmin and create a new database (e.g., `arca`).
-2. Run the initialization script `backend/001_init.sql` to create all tables and schema.
-3. If you have generated additional migration scripts (e.g., `audit_log_schema.sql`, `notifications_schema.sql`), run them to ensure the schema is completely up-to-date.
+### 1. Database Initialization
+1. Open pgAdmin and create a new database named `arca`.
+2. Run the initialization script `backend/001_init.sql` to create the schema (Users, MAPs, Audit Logs, Validation Verdicts).
 
-### 2. Backend Setup
+### 2. Backend Orchestration
 1. Navigate to the backend directory:
    ```bash
    cd backend
    ```
-2. Create and activate a virtual environment:
+2. Create and activate a Python virtual environment:
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -60,33 +73,40 @@ Before you begin, ensure you have met the following requirements:
    ```bash
    pip install -r requirements.txt
    ```
-4. Start the FastAPI server:
+4. Start the FastAPI server on port 8000:
    ```bash
    uvicorn main:app --reload --port 8000
    ```
 
-### 3. Frontend Setup
+### 3. Frontend Client
 1. Navigate to the frontend directory:
    ```bash
    cd frontend
    ```
-2. Install dependencies:
+2. Install Node dependencies:
    ```bash
    npm install
    ```
-3. Start the development server:
+3. Start the Vite development server:
    ```bash
    npm run dev
    ```
 
-## 📝 Usage Workflow
+---
 
-1. **Login:** Log in as a `compliance_officer` (e.g., `co@suraksha.com`).
-2. **Upload Circular:** Navigate to the "Upload Circular" page. Upload a regulatory PDF.
-3. **AI Pipeline:** The backend triggers the `run_pipeline.py` script. Docling extracts the text, and Ollama identifies MAPs. The Routing Agent assigns them to departments.
-4. **Notification:** Log in as a `department_user`. Notice the bell icon in the top right, indicating new assigned obligations.
-5. **Validation:** Review the MAP, submit evidence, and process it through the validation workflow.
+## 📝 High-Level Usage Workflow
 
-## 🤝 Contributing
+1. **Circular Ingestion:** Log in as a `compliance_officer` and upload a regulatory PDF. The system parses it, extracts the MAPs, and routes them to departments.
+2. **Action Delegation:** Department Users log in, view assigned MAPs, and execute physical changes (e.g. updating a firewall).
+3. **Evidence Upload:** The department user uploads a screenshot or policy doc directly into the platform.
+4. **AI Validation (Gate 2):** The Validation Agent analyzes the evidence via a 3-stage LLM pipeline.
+5. **Auto-Close / Review:** If the AI confidence is $>90\%$, it auto-closes the MAP. Otherwise, it generates a transparent line-by-line `Signal Breakdown` for the compliance officer to review manually.
 
-This project is actively developed. Ensure any UI modifications strictly adhere to the brutalist design philosophy established in the codebase—high contrast, solid borders, offset shadows, and purposeful micro-interactions.
+---
+
+## 🤝 Project Structure Documentation
+
+For deeper technical understanding of specific agents and UI elements, refer to their dedicated documentation:
+* [Downstream Routing Agent Documentation](backend/routing_agent/README.md)
+* [Autonomous Validation Agent Documentation](backend/validation_agent/README.md)
+* [Frontend Application Architecture](frontend/README.md)

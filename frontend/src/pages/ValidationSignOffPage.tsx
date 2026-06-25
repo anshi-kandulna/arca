@@ -174,13 +174,51 @@ function ValidationCard({ validation, index, onDecide }: { validation: any, inde
             </div>
 
             {validation.missingElements && validation.missingElements.length > 0 && (
-              <div className="p-6 border border-danger bg-danger-muted">
-                <p className="text-[10px] font-mono font-bold text-danger uppercase tracking-[0.2em] mb-4">Missing Elements Identified</p>
-                <ul className="list-square pl-5 space-y-2">
+              <div className="p-6 border border-black bg-danger-muted shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <AlertTriangle size={20} className="text-danger" />
+                  <p className="text-xs font-mono font-bold text-danger uppercase tracking-widest">Missing Elements</p>
+                </div>
+                <ul className="list-disc list-inside text-sm font-sans text-danger font-bold space-y-1">
                   {validation.missingElements.map((el: string, i: number) => (
-                    <li key={i} className="text-sm font-sans font-medium text-danger">{el}</li>
+                    <li key={i}>{el}</li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {validation.signalBreakdown && validation.signalBreakdown.length > 0 && (
+              <div className="p-0 border-t border-black mt-6">
+                <p className="text-[10px] font-mono font-bold text-black/50 uppercase tracking-[0.2em] mb-4 mt-6">Signal Breakdown</p>
+                <div className="space-y-3">
+                  {validation.signalBreakdown.map((sig: any, i: number) => {
+                    const isSigMet = sig.status === 'MET';
+                    const isSigPartial = sig.status === 'PARTIALLY_MET';
+                    const sigColor = isSigMet ? 'text-success' : isSigPartial ? 'text-warning' : 'text-danger';
+                    const sigBg = isSigMet ? 'bg-success-muted border-success/30' : isSigPartial ? 'bg-warning-muted border-warning/30' : 'bg-danger-muted border-danger/30';
+                    const Icon = isSigMet ? CheckCircle : isSigPartial ? AlertTriangle : XCircle;
+
+                    return (
+                      <div key={i} className={`p-4 border ${sigBg} flex flex-col gap-2`}>
+                        <div className="flex items-start gap-3">
+                          <Icon size={16} className={`mt-0.5 flex-shrink-0 ${sigColor}`} />
+                          <div>
+                            <p className="text-sm font-sans font-bold text-black">{sig.signal}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-[9px] font-mono font-bold uppercase tracking-widest px-1.5 py-0.5 border ${sigColor} border-current`}>
+                                {sig.status} ({sig.confidence}%)
+                              </span>
+                              <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-black/50 bg-white border border-black/20 px-1.5 py-0.5">
+                                WT: {sig.weight}
+                              </span>
+                            </div>
+                            {sig.reasoning && <p className="text-xs font-sans text-black/80 mt-2">{sig.reasoning}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
