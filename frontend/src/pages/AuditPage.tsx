@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { ScrollText, Search, Download, CheckCircle, Edit3, Send, AlertTriangle, Eye, UserCheck, Clock, Filter, Activity } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import Pagination from '@/components/Pagination';
 
 interface AuditEntry {
   id: string;
@@ -30,15 +31,6 @@ const actionTypeConfig: Record<string, { icon: React.ElementType; bg: string; te
   default: { icon: Activity, bg: 'bg-[#fbfbfa]', text: 'text-black', label: 'Action' }
 };
 
-const filterOptions = [
-  { key: 'all', label: 'All Events' },
-  { key: 'approval', label: 'Approvals' },
-  { key: 'edit', label: 'Edits' },
-  { key: 'escalation', label: 'Escalations' },
-  { key: 'detection', label: 'Detections' },
-  { key: 'submission', label: 'Submissions' },
-  { key: 'verification', label: 'Verifications' },
-];
 
 export default function AuditTrailPage() {
   const { token } = useAuth();
@@ -46,6 +38,11 @@ export default function AuditTrailPage() {
   const [filterType, setFilterType] = useState('all');
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterType]);
 
   useEffect(() => {
     fetch('http://localhost:8000/api/audit', {
@@ -62,6 +59,15 @@ export default function AuditTrailPage() {
       });
   }, [token]);
 
+  const uniqueActionTypes = Array.from(new Set(auditLog.map(e => e.actionType))).filter(Boolean);
+  const filterOptions = [
+    { key: 'all', label: 'All Events' },
+    ...uniqueActionTypes.map(type => ({
+      key: type,
+      label: actionTypeConfig[type]?.label || type
+    }))
+  ];
+
   const filtered = auditLog.filter((entry) => {
     const matchSearch =
       (entry.circularRef || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -71,6 +77,35 @@ export default function AuditTrailPage() {
     const matchType = filterType === 'all' || entry.actionType === filterType;
     return matchSearch && matchType;
   });
+
+  const pageSize = 10;
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginatedLogs = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const handleExportCSV = () => {
+    if (filtered.length === 0) return;
+    const headers = ['Timestamp', 'Actor', 'Role', 'Action', 'Type', 'Circular Ref', 'MAP ID', 'Department', 'Details'];
+    const rows = filtered.map(log => [
+      `"${log.timestamp}"`,
+      `"${log.actor}"`,
+      `"${log.actorRole}"`,
+      `"${log.action}"`,
+      `"${log.actionType}"`,
+      `"${log.circularRef || ''}"`,
+      `"${log.mapId || ''}"`,
+      `"${log.department || ''}"`,
+      `"${log.details.replace(/"/g, '""')}"`
+    ]);
+    
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'audit_logs.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <AppLayout activeRoute="/audit">
@@ -85,7 +120,7 @@ export default function AuditTrailPage() {
             <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">Audit Trail</h1>
           </div>
           <div className="mt-6 md:mt-0">
-            <button className="flex items-center justify-center gap-3 px-6 py-3 bg-white border border-black text-black font-mono text-sm font-bold tracking-widest hover:bg-black hover:text-white transition-colors uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <button onClick={handleExportCSV} className="flex items-center justify-center gap-3 px-6 py-3 bg-white border border-black text-black font-mono text-sm font-bold tracking-widest hover:bg-black hover:text-white transition-colors uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <Download size={16} />
               <span>Export CSV</span>
             </button>
@@ -159,7 +194,7 @@ export default function AuditTrailPage() {
             </div>
           ) : (
             <div className="divide-y divide-black/10">
-              {filtered.map((entry) => {
+              {paginatedLogs.map((entry) => {
                 const ac = actionTypeConfig[entry.actionType] || actionTypeConfig.default;
                 const ActionIcon = ac.icon;
                 const isSystem = entry.actor === 'ARCA System';
@@ -188,7 +223,7 @@ export default function AuditTrailPage() {
                         
                         <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex items-center gap-2 bg-[#fbfbfa] px-3 py-1 border border-black">
-                            <div className={`w-6 h-6 flex items-center justify-center border border-black ${isSystem ? 'bg-black text-white' : 'bg-primary text-white'}`}>
+                            <div className="w-6 h-6 flex items-center justify-center border border-black bg-white text-black">
                               <span className="text-[10px] font-mono font-bold">
                                 {isSystem ? 'S' : entry.actor.split(' ').map(n => n[0]).join('')}
                               </span>
@@ -218,6 +253,7 @@ export default function AuditTrailPage() {
               })}
             </div>
           )}
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
         </div>
       </div>
     </AppLayout>

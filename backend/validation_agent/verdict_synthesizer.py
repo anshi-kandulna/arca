@@ -5,6 +5,8 @@ def synthesize_verdict(signal_results):
     total_weight = 0.0
     earned_score = 0.0
     
+    print(f"[Verdict Synthesizer] Evaluating {len(signal_results)} signal results...")
+    
     for res in signal_results:
         w = weight_map.get(res.get("weight", "IMPORTANT").upper(), 2.0)
         s = status_map.get(res.get("status", "NOT_MET").upper(), 0.0)
@@ -16,6 +18,8 @@ def synthesize_verdict(signal_results):
         pct = 0
     else:
         pct = int((earned_score / total_weight) * 100)
+        
+    print(f"[Verdict Synthesizer] Total Weight: {total_weight}, Earned: {earned_score}, Percentage: {pct}%")
         
     if pct >= 75:
         verdict = "Satisfied"

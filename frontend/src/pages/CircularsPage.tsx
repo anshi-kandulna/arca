@@ -5,6 +5,7 @@ import AppLayout from '@/components/AppLayout';
 import { FileText, Search, Filter, Clock, CheckCircle, AlertTriangle, ClipboardCheck, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import Pagination from '@/components/Pagination';
 
 interface Circular {
   id: string;
@@ -51,6 +52,11 @@ export default function CircularsPage() {
   const navigate = useNavigate();
   const [circularsData, setCircularsData] = useState<Circular[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterStatus]);
 
   useEffect(() => {
     fetch('http://localhost:8000/api/circulars', {
@@ -79,6 +85,10 @@ export default function CircularsPage() {
     const matchStatus = filterStatus === 'all' || c.status === filterStatus;
     return matchSearch && matchStatus;
   });
+
+  const pageSize = 10;
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginatedCirculars = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const counts = {
     all: circularsData.length,
@@ -122,23 +132,28 @@ export default function CircularsPage() {
             <div className="px-4 py-4 border-r border-black flex items-center justify-center bg-[#fbfbfa]">
               <Filter size={18} className="text-black" />
             </div>
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'detected', label: 'Action Req.' },
-              { key: 'in_progress', label: 'In Progress' },
-              { key: 'completed', label: 'Completed' },
-            ].map((tab, idx) => (
-              <button
-                key={tab.key}
-                onClick={() => setFilterStatus(tab.key)}
-                className={`px-6 py-4 text-xs font-mono font-bold uppercase tracking-widest transition-colors ${idx !== 3 ? 'border-r border-black' : ''} ${
-                  filterStatus === tab.key
-                    ? 'bg-black text-white' : 'bg-transparent text-black hover:bg-[#fbfbfa]'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {(() => {
+              const uniqueStatuses = Array.from(new Set(circularsData.map(c => c.status))).filter(Boolean);
+              const dynamicStatusTabs = [
+                { key: 'all', label: 'All' },
+                ...uniqueStatuses.map(status => ({
+                  key: status,
+                  label: statusConfig[status]?.label || status.replace('_', ' ')
+                }))
+              ];
+              return dynamicStatusTabs.map((tab, idx) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setFilterStatus(tab.key)}
+                  className={`px-6 py-4 text-xs font-mono font-bold uppercase tracking-widest transition-colors ${idx !== dynamicStatusTabs.length - 1 ? 'border-r border-black' : ''} ${
+                    filterStatus === tab.key
+                      ? 'bg-black text-white' : 'bg-transparent text-black hover:bg-[#fbfbfa]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ));
+            })()}
           </div>
         </div>
 
@@ -151,11 +166,10 @@ export default function CircularsPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="bg-white border border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-16 text-center">
-              <Filter size={40} className="text-black/20 mx-auto mb-4" />
               <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/60">No circulars match your filter.</p>
             </div>
           ) : (
-            filtered.map((circular, idx) => {
+            paginatedCirculars.map((circular, idx) => {
               const sc = statusConfig[circular.status] || statusConfig.default;
               const StatusIcon = sc.icon;
               const total = circular.totalObligations || 0;
@@ -239,6 +253,7 @@ export default function CircularsPage() {
               );
             })
           )}
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
         </div>
       </div>
     </AppLayout>

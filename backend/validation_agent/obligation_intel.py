@@ -33,16 +33,22 @@ def extract_obligation_intel(map_obj):
         business_vertical=map_obj.business_vertical or "N/A"
     )
     
-    response = ollama.generate(
-        model="qwen2.5:7b",
-        prompt=prompt,
-        format="json"
-    )
-    
+    print(f"[Obligation Intel] Requesting generation for obligation: '{map_obj.obligation_text[:50]}...'")
+    try:
+        response = ollama.generate(
+            model="qwen2.5:7b",
+            prompt=prompt,
+            format="json"
+        )
+        print(f"[Obligation Intel] LLM returned response successfully.")
+    except Exception as e:
+        print(f"[Obligation Intel] Fatal Error during generation: {e}")
+        response = {'response': '{}'}
+        
     try:
         return json.loads(response['response'])
     except Exception as e:
-        print(f"Error parsing Phase 1 response: {e}")
+        print(f"[Obligation Intel] Error parsing Phase 1 response: {e}")
         # Fallback empty structure
         return {
             "obligation_type": "PROCESS",

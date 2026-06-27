@@ -519,7 +519,8 @@ def get_audit_logs(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    logs = crud.get_audit_logs(db, current_user.bank_id, user_id=str(current_user.id))
+    user_id = str(current_user.id) if current_user.role not in ['system_admin', 'compliance_officer'] else None
+    logs = crud.get_audit_logs(db, current_user.bank_id, user_id=user_id)
     return [
         {
             "id": str(log.id),

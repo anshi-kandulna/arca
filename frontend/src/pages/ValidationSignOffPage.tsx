@@ -6,13 +6,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
   CheckCircle, XCircle, AlertTriangle, ShieldCheck, 
-  FileText, Brain, ChevronDown, ChevronUp, Bot 
+  FileText, Brain, ChevronDown, ChevronUp, Bot, Search
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 
 export default function ValidationSignOffPage() {
   const { token } = useAuth();
   const [validations, setValidations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
 
   const fetchValidations = async () => {
     try {
@@ -54,6 +61,16 @@ export default function ValidationSignOffPage() {
     }
   };
 
+  const filteredValidations = validations.filter(v => {
+    if (!search) return true;
+    const term = search.toLowerCase();
+    return v.mapId?.toLowerCase().includes(term) || v.mapAction?.toLowerCase().includes(term);
+  });
+
+  const pageSize = 10;
+  const totalPages = Math.ceil(filteredValidations.length / pageSize);
+  const paginatedValidations = filteredValidations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <AppLayout activeRoute="/gate-2">
       <div className="space-y-8 pb-12 fade-in-up">
@@ -67,7 +84,21 @@ export default function ValidationSignOffPage() {
             <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">Validation</h1>
           </div>
           <div className="mt-6 md:mt-0 flex items-center gap-4 bg-white border border-black p-3 px-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <span className="font-mono text-sm font-bold text-black uppercase tracking-widest">{validations.length} Pending Sign-Offs</span>
+            <span className="font-mono text-sm font-bold text-black uppercase tracking-widest">{filteredValidations.length} Pending Sign-Offs</span>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="flex border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-black" />
+            <input
+              type="text"
+              placeholder="Search by MAP ID or Action..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-transparent border-none pl-12 pr-4 py-4 text-sm font-mono text-black placeholder:text-black/40 focus:outline-none focus:ring-0"
+            />
           </div>
         </div>
 
@@ -76,7 +107,7 @@ export default function ValidationSignOffPage() {
             <div className="w-10 h-10 border-4 border-black/20 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/60">Fetching Validations...</p>
           </div>
-        ) : validations.length === 0 ? (
+        ) : filteredValidations.length === 0 ? (
           <div className="bg-white border border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-16 text-center">
             <ShieldCheck size={48} className="text-success mx-auto mb-4 opacity-50" />
             <h3 className="text-2xl font-serif text-black mb-2">All Caught Up!</h3>
@@ -84,9 +115,10 @@ export default function ValidationSignOffPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {validations.map((v, idx) => (
-              <ValidationCard key={v.id} validation={v} index={idx + 1} onDecide={(action) => handleDecision(v.id, action)} />
+            {paginatedValidations.map((v, idx) => (
+              <ValidationCard key={v.id} validation={v} index={(currentPage - 1) * pageSize + idx + 1} onDecide={(action) => handleDecision(v.id, action)} />
             ))}
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
           </div>
         )}
       </div>
@@ -125,14 +157,14 @@ function ValidationCard({ validation, index, onDecide }: { validation: any, inde
         <div className="flex items-center gap-3 flex-shrink-0 mt-4 lg:mt-0">
           <button
             onClick={() => onDecide('Confirm Close')}
-            className="flex items-center gap-2 px-4 py-2 bg-success text-white text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-black transition-colors border border-black"
+            className="flex items-center gap-2 px-4 py-2 bg-white text-black text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors border border-black"
           >
             <CheckCircle size={14} /> Accept Verdict
           </button>
           
           <button
             onClick={() => onDecide('Request Resubmission')}
-            className="flex items-center gap-2 px-4 py-2 bg-danger text-white text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-black transition-colors border border-black"
+            className="flex items-center gap-2 px-4 py-2 bg-white text-black text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors border border-black"
           >
             <AlertTriangle size={14} /> Reject Evidence
           </button>

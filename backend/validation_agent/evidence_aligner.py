@@ -28,7 +28,9 @@ def align_evidence(map_obj, intel_data, combined_evidence_text):
         
     results = []
     
-    for signal in signals:
+    print(f"[Evidence Aligner] Starting alignment for {len(signals)} signals...")
+    for idx, signal in enumerate(signals):
+        print(f"[Evidence Aligner] Processing signal {idx+1}/{len(signals)}: '{signal['signal'][:40]}...'")
         prompt = ALIGNMENT_PROMPT.format(
             obligation_text=map_obj.obligation_text,
             signal_description=signal["signal"],
@@ -38,8 +40,9 @@ def align_evidence(map_obj, intel_data, combined_evidence_text):
         try:
             llm_response = ollama.generate(model="qwen2.5:7b", prompt=prompt, format="json")
             llm_res = json.loads(llm_response['response'])
+            print(f"[Evidence Aligner] Signal {idx+1} result: {llm_res.get('status')} ({llm_res.get('confidence')}%)")
         except Exception as e:
-            print(f"LLM Error in alignment: {e}")
+            print(f"[Evidence Aligner] LLM Error in alignment for signal {idx+1}: {e}")
             llm_res = {"status": "NOT_MET", "confidence": 0, "reasoning": "Error validating signal"}
             
         results.append({

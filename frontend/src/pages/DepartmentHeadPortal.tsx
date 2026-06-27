@@ -5,13 +5,20 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
-  CheckCircle, Clock, Send, AlertTriangle, Users, FileText, ChevronRight, Layers, Briefcase
+  CheckCircle, Clock, Send, AlertTriangle, Users, FileText, ChevronRight, Layers, Briefcase, Search
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 
 export default function DepartmentHeadPortal() {
   const { token, user } = useAuth();
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
 
   useEffect(() => {
     async function fetchTasks() {
@@ -40,6 +47,16 @@ export default function DepartmentHeadPortal() {
   const activeCount = tasks.filter(t => ['pending_evidence', 'draft', 'rework_required'].includes(t.status)).length;
   const reviewCount = tasks.filter(t => t.status === 'under_review').length;
   const completedCount = tasks.filter(t => t.status === 'completed' || t.status === 'closed').length;
+
+  const filteredTasks = tasks.filter(t => {
+    if (!search) return true;
+    const term = search.toLowerCase();
+    return t.mapId?.toLowerCase().includes(term) || t.action?.toLowerCase().includes(term);
+  });
+
+  const pageSize = 10;
+  const totalPages = Math.ceil(filteredTasks.length / pageSize);
+  const paginatedTasks = filteredTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <AppLayout activeRoute="/department-portal">
@@ -75,8 +92,20 @@ export default function DepartmentHeadPortal() {
         </div>
 
         <div className="card-elevated bg-white p-0 overflow-hidden stagger-4">
-          <div className="px-6 py-5 border-b border-black bg-[#fbfbfa] flex items-center justify-between">
+          <div className="px-6 py-5 border-b border-black bg-[#fbfbfa] flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h3 className="text-lg font-serif text-black uppercase tracking-widest">Assigned MAPs</h3>
+            
+            {/* Search Input */}
+            <div className="relative w-full md:w-64 border border-black bg-white">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/50" />
+              <input
+                type="text"
+                placeholder="Search by MAP ID or Obligation..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-transparent border-none pl-9 pr-3 py-2 text-[10px] font-mono text-black placeholder:text-black/40 focus:outline-none focus:ring-0 uppercase tracking-widest"
+              />
+            </div>
           </div>
           
           {loading ? (
@@ -97,7 +126,7 @@ export default function DepartmentHeadPortal() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/10">
-                  {tasks.map(task => (
+                  {paginatedTasks.map(task => (
                     <tr key={task.id} className="hover:bg-black/5 transition-colors">
                       <td className="px-6 py-4">
                         <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-3 py-1 border border-primary/20">{task.mapId}</span>
@@ -120,15 +149,20 @@ export default function DepartmentHeadPortal() {
                       </td>
                     </tr>
                   ))}
-                  {tasks.length === 0 && (
+                  {paginatedTasks.length === 0 && (
                     <tr>
                       <td colSpan={5} className="px-6 py-16 text-center text-sm font-mono uppercase tracking-widest font-bold text-black/50">
-                        No tasks assigned to your department.
+                        No tasks match your search.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+          {filteredTasks.length > 0 && (
+            <div className="p-4 border-t border-black bg-[#fbfbfa]">
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
           )}
         </div>

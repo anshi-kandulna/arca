@@ -70,3 +70,7 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+*.pdf
+*.xlsx
+*.csv

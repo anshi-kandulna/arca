@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import {
   ClipboardList, Clock, CheckCircle, AlertTriangle, Upload,
-  FileText, ChevronDown, ChevronUp, ExternalLink, Send, X, Paperclip
+  FileText, ChevronDown, ChevronUp, ExternalLink, Send, X, Paperclip, Search
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -156,6 +157,12 @@ export default function MyTasksPage() {
   const { token, user } = useAuth();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [tasksData, setTasksData] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus]);
 
   useEffect(() => {
     fetch('http://localhost:8000/api/maps', {
@@ -173,10 +180,23 @@ export default function MyTasksPage() {
   }, [token, user]);
 
   const filteredTasks = tasksData.filter((task) => {
+    if (searchQuery) {
+       const term = searchQuery.toLowerCase();
+       if (!task.action?.toLowerCase().includes(term) && !task.mapId?.toLowerCase().includes(term)) {
+         return false;
+       }
+    }
+    
     if (filterStatus === 'all') return true;
     if (filterStatus === 'active') return ['pending_evidence', 'in_progress', 'draft'].includes(task.status);
+    if (filterStatus === 'completed') return ['completed', 'closed'].includes(task.status);
+    if (filterStatus === 'pending_evidence') return ['pending_evidence', 'draft'].includes(task.status);
     return task.status === filterStatus;
   });
+  
+  const pageSize = 10;
+  const totalPages = Math.ceil(filteredTasks.length / pageSize);
+  const paginatedTasks = filteredTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const counts = {
     all: tasksData.length,
@@ -240,18 +260,29 @@ export default function MyTasksPage() {
               </span>
             </button>
           ))}
+          <div className="flex items-center gap-2 px-4 py-2 border-l border-black flex-1 min-w-[200px]">
+            <Search size={16} className="text-black/50" />
+            <input 
+              type="text" 
+              placeholder="Search by Map ID or Action..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none outline-none text-xs font-mono w-full text-black placeholder:text-black/40"
+            />
+          </div>
         </div>
 
         {/* Task List */}
         <div className="space-y-6 stagger-4">
-          {filteredTasks.length === 0 ? (
+          {paginatedTasks.length === 0 ? (
             <div className="card-elevated border-2 border-black border-dashed bg-[#fbfbfa] px-6 py-20 text-center">
               <CheckCircle size={40} className="text-black/20 mx-auto mb-4" />
-              <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/50">No tasks in this category</p>
+              <p className="text-sm font-mono uppercase tracking-widest font-bold text-black/50">No tasks found</p>
             </div>
           ) : (
-            filteredTasks.map((task) => <TaskCard key={task.id} task={task} token={token || ''} onSubmitted={() => window.location.reload()} />)
+            paginatedTasks.map((task) => <TaskCard key={task.id} task={task} token={token || ''} onSubmitted={() => window.location.reload()} />)
           )}
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
         </div>
       </div>
     </AppLayout>

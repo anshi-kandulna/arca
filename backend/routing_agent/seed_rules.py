@@ -32,7 +32,7 @@ if sys.path and os.path.abspath(sys.path[0]) == SCRIPT_DIR:
 
 sys.path.insert(0, BACKEND_DIR)
 
-from routing_agent.routing_agent import RoutingAgent
+from routing_agent import RoutingAgent
 
 # ── Seed definitions ──────────────────────────────────────────────────────────
 # Format: (action, department, sub_vertical, reasoning)
