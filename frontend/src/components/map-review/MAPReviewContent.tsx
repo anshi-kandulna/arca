@@ -6,6 +6,7 @@ import CircularMetadataHeader from './CircularMetadataHeader';
 import MAPCardList from './MAPCardList';
 import BatchApproveBar from './BatchApproveBar';
 import { toast } from 'sonner';
+import { useSearchParams } from 'react-router-dom';
 
 export interface MAP {
   id: string;
@@ -25,7 +26,10 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function MAPReviewContent() {
   const { token } = useAuth();
-  const [selectedCircularId, setSelectedCircularId] = useState('');
+  const [searchParams] = useSearchParams();
+  const paramCircularId = searchParams.get('circular');
+  
+  const [selectedCircularId, setSelectedCircularId] = useState(paramCircularId || '');
   const [circularData, setCircularData] = useState<Record<string, any>>({});
   const [maps, setMaps] = useState<Record<string, MAP[]>>({});
   const [dispatching, setDispatching] = useState(false);
@@ -70,7 +74,11 @@ export default function MAPReviewContent() {
         setCircularData(newCircData);
         setMaps(newMaps);
         if (circs.length > 0) {
-          setSelectedCircularId(circs[0].id);
+          if (paramCircularId && newCircData[paramCircularId]) {
+            setSelectedCircularId(paramCircularId);
+          } else if (!selectedCircularId) {
+            setSelectedCircularId(circs[0].id);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch map review data", err);

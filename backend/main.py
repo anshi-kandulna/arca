@@ -209,7 +209,12 @@ def get_dashboard_stats(
     compliance_rate = 0 if total_obligations == 0 else round((completed_obligations / total_obligations) * 100, 1)
     
     # Department health using all maps
+    verticals = db.query(models.BusinessVertical).filter(models.BusinessVertical.bank_id == current_user.bank_id).all()
     dept_stats = {}
+    
+    for v in verticals:
+        dept_stats[v.name] = {"total": 0, "compliant": 0}
+        
     for m in maps:
         dept = m.business_vertical or "Unassigned"
         if dept not in dept_stats:
@@ -351,6 +356,10 @@ def get_maps(
             
     maps = crud.get_maps_by_bank(db, current_user.bank_id, circular_id, business_vertical_name)
     
+    # Filter out undispatched maps for department users
+    if current_user.role in ['department_user', 'department_head']:
+        maps = [m for m in maps if m.status not in ["draft", "pending", "approved", "rejected", "edited"]]
+    
     return [
         {
             "id": str(m.id),
@@ -487,12 +496,37 @@ def decide_validation(
     new_status = db_map.status
     if decision.action == "Confirm Close":
         new_status = "closed"
+        action_type = "MANUAL_VALIDATION_APPROVED"
+        msg = f"Evidence for MAP {db_map.map_ref} has been approved by Compliance Officer. Status is closed."
     elif decision.action == "Override":
         new_status = "closed" # Overridden to closed
+        action_type = "MANUAL_VALIDATION_OVERRIDDEN"
+        msg = f"Evidence for MAP {db_map.map_ref} was overridden and approved by Compliance Officer. Status is closed."
     elif decision.action == "Request Resubmission":
         new_status = "rework_required"
+        action_type = "MANUAL_VALIDATION_REJECTED"
+        msg = f"Evidence for MAP {db_map.map_ref} was rejected by Compliance Officer. Resubmission is required."
         
     crud.update_map(db, db_map, {"status": new_status})
+    
+    circular = crud.get_circular(db, db_map.circular_id)
+    crud.create_audit_log(
+        db=db,
+        bank_id=str(current_user.bank_id),
+        user_id=str(current_user.id),
+        actor=current_user.full_name or current_user.email,
+        actor_role=current_user.role,
+        action=f"Manual Verdict: {decision.action}",
+        action_type=action_type,
+        circular_ref=circular.ref_number if circular else None,
+        map_ref=db_map.map_ref,
+        business_vertical=db_map.business_vertical,
+        details=f"Compliance Officer decided '{decision.action}' for MAP {db_map.map_ref}. New status: {new_status}."
+    )
+    
+    # Notify department
+    crud.create_notification(db, bank_id=str(current_user.bank_id), business_vertical=db_map.business_vertical, message=msg)
+    
     return {"message": f"Action {decision.action} recorded"}
 
 @app.get("/api/departments/stats")
@@ -501,9 +535,13 @@ def get_departments_stats(
     db: Session = Depends(database.get_db)
 ):
     maps = crud.get_maps_by_bank(db, current_user.bank_id)
+    verticals = db.query(models.BusinessVertical).filter(models.BusinessVertical.bank_id == current_user.bank_id).all()
     
     # Compute stats per vertical
     stats = {}
+    for v in verticals:
+        stats[v.name] = {"total": 0, "completed": 0, "pending": 0, "overdue": 0}
+        
     for m in maps:
         v = m.business_vertical or "Unassigned"
         if v not in stats:
