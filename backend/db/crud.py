@@ -39,6 +39,9 @@ def update_circular(db: Session, circular: models.Circular, data: dict):
 def get_map(db: Session, map_id: str):
     return db.query(models.Map).filter(models.Map.id == map_id).first()
 
+def get_map_by_ref(db: Session, bank_id: str, map_ref: str):
+    return db.query(models.Map).filter(models.Map.bank_id == bank_id, models.Map.map_ref == map_ref).first()
+
 def get_maps_by_bank(db: Session, bank_id: str, circular_id: str = None, business_vertical_name: str = None):
     query = db.query(models.Map).filter(models.Map.bank_id == bank_id)
     if circular_id:

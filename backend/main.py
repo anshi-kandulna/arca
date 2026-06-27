@@ -92,7 +92,7 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
                 circular.total_obligations = data.get("total_maps", 0)
                 
                 for map_item in data.get("maps", []):
-                    crud.create_map(db, {
+                    map_data_dict = {
                         "circular_id": circular.id,
                         "bank_id": bank_id,
                         "map_ref": map_item["map_id"],
@@ -104,7 +104,13 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
                         "clause_ref": map_item["clause_ref"],
                         "priority": map_item["priority"],
                         "page_no": map_item["page_no"]
-                    })
+                    }
+                    
+                    existing_map = crud.get_map_by_ref(db, bank_id=bank_id, map_ref=map_item["map_id"])
+                    if existing_map:
+                        crud.update_map(db, existing_map, map_data_dict)
+                    else:
+                        crud.create_map(db, map_data_dict)
                     
                     if map_item["department"] and map_item["department"] != "Unassigned":
                         # We no longer create notifications here. Notifications are deferred until manual dispatch.

@@ -71,18 +71,6 @@ export default function Topbar({ onMobileMenuOpen }: TopbarProps) {
         <Menu size={20} />
       </button>
 
-      {/* Search */}
-      <div className="flex-1 max-w-xl">
-        <div className="relative group">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-black transition-transform group-focus-within:scale-110" />
-          <input
-            type="text"
-            placeholder="Search circulars, MAPs, departments… ⌘K"
-            className="w-full bg-white border-2 border-black pl-11 pr-4 py-2 font-mono text-xs font-bold text-black uppercase tracking-widest placeholder:text-black/40 focus:outline-none focus:ring-0 focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
-          />
-        </div>
-      </div>
-
       <div className="flex items-center gap-4 ml-auto">
         {/* Role badge */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">

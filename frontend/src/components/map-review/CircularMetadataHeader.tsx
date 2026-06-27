@@ -46,11 +46,6 @@ export default function CircularMetadataHeader({ circular }: Props) {
             <FileText size={12} className="text-muted-foreground" />
             <span className="text-2xs text-muted-foreground font-mono-data">Detected {circular.detectedDate}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Brain size={12} className="text-muted-foreground" />
-            <span className="text-2xs text-muted-foreground font-mono-data">ARCA confidence:</span>
-            <span className={`text-2xs font-bold font-mono-data ${confidenceColor}`}>{circular.arcaConfidence}%</span>
-          </div>
         </div>
       </div>
     </div>
