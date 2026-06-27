@@ -190,41 +190,53 @@ def get_dashboard_stats(
     circulars = crud.get_circulars_by_bank(db, current_user.bank_id)
     maps = crud.get_maps_by_bank(db, current_user.bank_id)
     
-    # Calculate overdue maps (mock logic: assume some are overdue based on deadline_raw parsing, or just mock count for now)
+    # Upcoming MAPs (not closed)
+    upcoming_maps = [m for m in maps if m.status != 'closed']
+    upcoming_count = len(upcoming_maps)
+    
+    # Overdue
     overdue_count = 0
-    upcoming_count = 0
-    # In a real scenario, we'd parse deadline_raw to date and compare with today.
-    # For now, let's just count all maps as "Upcoming"
-    upcoming_count = len(maps)
     
     # Calculate compliance rate
     total_obligations = sum(c.total_obligations or 0 for c in circulars)
     completed_obligations = sum(c.completed_obligations or 0 for c in circulars)
     compliance_rate = 0 if total_obligations == 0 else round((completed_obligations / total_obligations) * 100, 1)
     
-    # Use the most recent circular for department health
-    recent_circular = max(circulars, key=lambda x: x.published_date) if circulars else None
+    # Department health using all maps
+    dept_stats = {}
+    for m in maps:
+        dept = m.business_vertical or "Unassigned"
+        if dept not in dept_stats:
+            dept_stats[dept] = {"total": 0, "compliant": 0}
+        dept_stats[dept]["total"] += 1
+        if m.status == 'closed':
+            dept_stats[dept]["compliant"] += 1
+            
     dept_data = []
-    if recent_circular and recent_circular.vertical_summary:
-        for dept, stats in recent_circular.vertical_summary.items():
-            if isinstance(stats, dict):
-                compliant = stats.get("compliant", 0)
-                total = stats.get("total", 1)
-            else:
-                compliant = 0
-                total = stats if isinstance(stats, int) else 1
+    for dept, stats in dept_stats.items():
+        dept_data.append({
+            "dept": dept,
+            "rate": round((stats["compliant"] / max(stats["total"], 1)) * 100, 1)
+        })
             
-            dept_data.append({
-                "dept": dept,
-                "rate": round((compliant / max(total, 1)) * 100, 1)
-            })
-            
-    # Priority summary for trend Data (mocking trend for now)
+    # Priority summary for trend Data (mocking trend for now as fallback)
+    # Ideally, we would look at historical completion dates.
     trend_data = [
         {'week': 'W1', 'rate': max(0, compliance_rate - 10), 'target': 85},
         {'week': 'W2', 'rate': max(0, compliance_rate - 5), 'target': 85},
         {'week': 'W3', 'rate': compliance_rate, 'target': 85},
     ]
+    
+    # Imminent Actions (First 5 upcoming)
+    imminent_actions = []
+    for m in upcoming_maps[:5]:
+        imminent_actions.append({
+            "id": str(m.id),
+            "ref": m.map_ref,
+            "action": m.obligation_text[:60] + "..." if len(m.obligation_text) > 60 else m.obligation_text,
+            "deadline": m.deadline_raw or "Inherited",
+            "priority": m.priority
+        })
 
     return {
         "metrics": {
@@ -235,6 +247,7 @@ def get_dashboard_stats(
         },
         "trendData": trend_data,
         "deptData": dept_data,
+        "imminent_actions": imminent_actions,
         "recent_circulars": [
             {
                 "id": str(c.id),

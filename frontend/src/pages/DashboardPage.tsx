@@ -57,10 +57,10 @@ export default function DashboardPage() {
   }, [token]);
 
   const metricsArray = [
-    { id: 'gate1', label: 'Gate 1 Queue', value: data.metrics.gate1, unit: 'MAPs', icon: FileSearch, variant: 'warning', hero: true, href: '/map-review-screen' },
-    { id: 'overdue', label: 'Overdue Executions', value: data.metrics.overdue, unit: 'Tasks', icon: AlertTriangle, variant: 'danger', hero: false, href: null },
-    { id: 'compliance', label: 'Compliance Index', value: data.metrics.compliance, unit: '%', icon: TrendingUp, variant: 'success', hero: false, href: null },
-    { id: 'deadlines', label: 'Upcoming Target', value: data.metrics.deadlines, unit: 'Tasks', icon: Clock, variant: 'info', hero: false, href: null },
+    { id: 'gate1', label: 'Gate 1 Queue', value: data.metrics.gate1, unit: 'MAPs', icon: FileSearch, variant: 'warning', href: '/map-review-screen' },
+    { id: 'overdue', label: 'Overdue Executions', value: data.metrics.overdue, unit: 'Tasks', icon: AlertTriangle, variant: 'danger', href: null },
+    { id: 'compliance', label: 'Compliance Index', value: data.metrics.compliance, unit: '%', icon: TrendingUp, variant: 'success', href: null },
+    { id: 'deadlines', label: 'Upcoming Target', value: data.metrics.deadlines, unit: 'Tasks', icon: Clock, variant: 'info', href: null },
   ];
 
   const activities = (data.recent_circulars || []).slice(0, 4).map((c: any, i: number) => ({
@@ -86,8 +86,8 @@ export default function DashboardPage() {
             <h1 className="text-5xl md:text-7xl font-serif text-black leading-none tracking-tight">Intelligence</h1>
           </div>
           <div className="mt-6 md:mt-0">
-            <Link to="/map-review-screen" className="group inline-flex items-center justify-center gap-3 px-6 py-3 bg-primary text-white font-mono text-sm font-bold tracking-widest hover:bg-black transition-colors uppercase">
-              <span>Review MAPs</span>
+            <Link to="/circulars" className="group inline-flex items-center justify-center gap-3 px-6 py-3 bg-white text-black border border-black font-mono text-sm font-bold tracking-widest hover:bg-black hover:text-white transition-colors uppercase">
+              <span>Browse Circulars</span>
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -100,32 +100,25 @@ export default function DashboardPage() {
             const content = (
               <>
                 <div className="flex justify-between items-start mb-6">
-                  <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-foreground/80">{m.label}</p>
-                  <Icon size={18} className="text-foreground" strokeWidth={2.5} />
+                  <p className={`text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-foreground/80`}>{m.label}</p>
+                  <Icon size={18} className={vClasses[m.variant]?.icon || 'text-foreground'} strokeWidth={2.5} />
                 </div>
                 <div className="mt-auto">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-5xl font-mono font-bold text-black tracking-tighter">{m.value}</span>
-                    <span className="text-sm font-mono font-bold text-black/60 uppercase">{m.unit}</span>
+                    <span className={`text-5xl font-mono font-bold tracking-tighter text-black`}>{m.value}</span>
+                    <span className={`text-sm font-mono font-bold uppercase text-black/60`}>{m.unit}</span>
                   </div>
                 </div>
               </>
             );
 
-            const isHero = m.hero;
-            const baseClasses = `card-elevated p-6 flex flex-col justify-between stagger-${idx + 1} ${isHero ? 'bg-black text-white lg:col-span-2' : 'bg-white'}`;
-            const linkClasses = `card-elevated-hover p-6 flex flex-col justify-between stagger-${idx + 1} ${isHero ? 'bg-black text-white lg:col-span-2' : 'bg-white'}`;
+            const baseClasses = `card-elevated p-6 flex flex-col justify-between stagger-${idx + 1} bg-white`;
+            const linkClasses = `card-elevated-hover p-6 flex flex-col justify-between stagger-${idx + 1} bg-white`;
 
             if (m.href) {
               return (
                 <Link key={m.id} to={m.href} className={linkClasses}>
                   {content}
-                  {/* If black background, invert text */}
-                  {isHero && (
-                    <div className="absolute top-6 right-6">
-                      <ArrowUpRight size={24} className="text-primary" />
-                    </div>
-                  )}
                 </Link>
               );
             }
@@ -166,10 +159,10 @@ export default function DashboardPage() {
                 <BarChart data={data.deptData} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }} barCategoryGap="20%">
                   <CartesianGrid strokeDasharray="2 2" stroke="#d1d1cf" horizontal={false} />
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: '#111', fontSize: 10, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="dept" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={90} />
+                  <YAxis type="category" dataKey="dept" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={150} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f4f4f0' }} />
                   <Bar dataKey="rate" radius={0}>
-                    {data.deptData.map((e: any, i: number) => (
+                    {data.deptData && data.deptData.map((e: any, i: number) => (
                       <Cell key={i} fill={e.rate >= 90 ? '#00AA00' : e.rate >= 75 ? '#0028FF' : '#FF5500'} />
                     ))}
                   </Bar>
@@ -191,11 +184,32 @@ export default function DashboardPage() {
                 Sort {sortDir === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
               </div>
             </div>
-            <div className="p-12 flex flex-col items-center justify-center min-h-[200px]">
-              <div className="w-16 h-16 border-2 border-black rounded-full flex items-center justify-center mb-4">
-                <CheckCircle size={24} className="text-black" />
-              </div>
-              <p className="text-sm font-mono uppercase tracking-widest text-black/60 font-bold">Zero Imminent Deadlines</p>
+            <div className="p-0">
+              {data.imminent_actions && data.imminent_actions.length > 0 ? (
+                <div className="flex flex-col">
+                  {data.imminent_actions.map((action: any, i: number) => (
+                    <div key={action.id} className={`flex items-stretch ${i !== data.imminent_actions.length - 1 ? 'border-b border-black/10' : ''}`}>
+                      <div className="w-12 bg-black/5 flex flex-col items-center justify-center border-r border-black/10 flex-shrink-0">
+                        <AlertTriangle size={16} className={action.priority === 'HIGH' ? 'text-danger' : 'text-warning'} />
+                      </div>
+                      <div className="p-4 flex-1">
+                        <div className="flex justify-between items-start mb-2">
+                          <p className="text-[10px] font-mono font-bold uppercase tracking-[0.1em] text-primary">{action.ref}</p>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-black/5 text-black uppercase">{action.deadline}</span>
+                        </div>
+                        <p className="text-sm font-bold text-black line-clamp-2">{action.action}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-12 flex flex-col items-center justify-center min-h-[200px]">
+                  <div className="w-16 h-16 border-2 border-black rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle size={24} className="text-black" />
+                  </div>
+                  <p className="text-sm font-mono uppercase tracking-widest text-black/60 font-bold">Zero Imminent Deadlines</p>
+                </div>
+              )}
             </div>
           </div>
 
