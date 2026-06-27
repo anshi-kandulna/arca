@@ -3,11 +3,10 @@ import json
 import re
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from collections import defaultdict
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import time
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter, PdfFormatOption
+from sentence_transformers import SentenceTransformer, util
 
 
 def doclingSetup():
@@ -27,7 +26,7 @@ def doclingSetup():
     print("Converter init:", time.time() - start)
 
     start = time.time()
-    doc = converter.convert("circular.pdf").document
+    doc = converter.convert("circular2.pdf").document
     print("Convert:", time.time() - start)
 
     print(type(doc))
@@ -120,6 +119,8 @@ def overlapAndExtraction(pages):
     EXTRACT_PROMPT = """Extract all regulatory obligations from this RBI circular text.
     Look for keywords: shall, must, are required to, with effect from, not later than, within X days.
 
+    IMPORTANT: If multiple sub-points belong to the same clause and have the same responsible party and deadline, consolidate them into ONE MAP. Do not create separate MAPs for each bullet point of the same obligation.
+
     Return this exact JSON structure:
     {{
     "maps": [
@@ -147,7 +148,7 @@ def overlapAndExtraction(pages):
         page_text = " ".join(item["text"] for item in pages[page_no])
         if i>0:
             prev_text = " ".join(item["text"] for item in pages[sorted_pages[i-1]])
-            context = prev_text[-400:] + " " + page_text
+            context = prev_text[-200:] + " " + page_text
         else:
             context = page_text
         print(f"  Processing page {page_no}...")
@@ -179,13 +180,25 @@ def overlapAndExtraction(pages):
     return all_maps, failed_pages
 
 
+from sentence_transformers import SentenceTransformer, util
+
+_embedder = None
+
+def get_embedder():
+    global _embedder
+    if _embedder is None:
+        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedder
+
+
 def reconstructingbbox(all_maps, pages):
-    # Group maps by page
     maps_by_page = defaultdict(list)
     for m in all_maps:
         maps_by_page[m["page_no"]].append(m)
-    
-    c=0
+
+    embedder = get_embedder()
+    c = 0
+
     for page_no, page_maps in maps_by_page.items():
         items = pages[page_no]
         page_texts = [item["text"] for item in items]
@@ -193,24 +206,44 @@ def reconstructingbbox(all_maps, pages):
         if not page_texts:
             continue
 
-        # Fit once for this page
-        vectorizer = TfidfVectorizer()
-        page_vecs = vectorizer.fit_transform(page_texts).toarray()
+        block_embeddings = embedder.encode(page_texts, convert_to_tensor=True, show_progress_bar=False)
 
         for m in page_maps:
-            action_vec = vectorizer.transform([m["action"]]).toarray()[0]
-            scores = cosine_similarity([action_vec], page_vecs)[0]
+            action_embedding = embedder.encode(m["action"], convert_to_tensor=True)
+            scores = util.cos_sim(action_embedding, block_embeddings)[0]
 
-            if len(scores) == 0:
-                c+=1
+            if scores.numel() == 0:
+                c += 1
                 continue
 
-            best_idx = scores.argmax()
+            best_idx = scores.argmax().item()
             m["bbox"] = items[best_idx]["bbox"]
             m["matched_text"] = items[best_idx]["text"]
-    
-    print("no bbox found : ",c)
+
+    print("no bbox found:", c)
     return all_maps
+
+
+def deduplicateMaps(all_maps, threshold=0.92):
+    embedder = get_embedder()
+    actions = [m["action"] for m in all_maps]
+    embeddings = embedder.encode(actions, convert_to_tensor=True, show_progress_bar=False)
+    
+    keep = []
+    dropped = 0
+    for i, m in enumerate(all_maps):
+        duplicate = False
+        for j in keep:
+            score = util.cos_sim(embeddings[i], embeddings[j]).item()
+            if score >= threshold:
+                duplicate = True
+                dropped += 1
+                break
+        if not duplicate:
+            keep.append(i)
+    
+    print(f"Deduplication: {len(all_maps)} → {len(keep)} maps ({dropped} dropped)")
+    return [all_maps[i] for i in keep]
 
 
 def addMetadata(metadata, all_maps, pages, failed_pages):
@@ -253,9 +286,10 @@ def main():
     metadata = extractMetadata(pages)
     all_maps, failed_pages=overlapAndExtraction(pages)
     all_maps=reconstructingbbox(all_maps, pages)
+    all_maps=deduplicateMaps(all_maps) 
     final_json=addMetadata(metadata, all_maps, pages, failed_pages)
 
-    with open("arca_output.json", "w", encoding="utf-8") as f:
+    with open("arca_output2.json", "w", encoding="utf-8") as f:
         json.dump(final_json, f, ensure_ascii=False, indent=2)
 
     print("json saved as arca_output.json ...")
