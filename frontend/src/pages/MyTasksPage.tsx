@@ -31,6 +31,7 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
   const [expanded, setExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [fileName, setFileName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
 
   const sc = statusConfig[task.status] || statusConfig['draft'];
@@ -38,19 +39,22 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
   const canSubmit = task.status === 'draft' || task.status === 'pending_evidence' || task.status === 'rework_required';
 
   const handleSubmit = async () => {
-    if (!fileName) {
+    if (!selectedFile) {
       toast.error('Please attach evidence before submitting');
       return;
     }
     setUploading(true);
     try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('notes', notes);
+
       const res = await fetch(`http://localhost:8000/api/maps/${task.id}/evidence`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ file_name: fileName, notes: notes })
+        body: formData
       });
       if (!res.ok) throw new Error('Submission failed');
       toast.success(`Evidence submitted for ${task.mapId}. ARCA will review within 24 hours.`);
@@ -113,7 +117,13 @@ function TaskCard({ task, token, onSubmitted }: { task: any, token: string, onSu
                   <input
                     type="file"
                     className="hidden"
-                    onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setFileName(f.name);
+                        setSelectedFile(f);
+                      }
+                    }}
                   />
                 </label>
                 <textarea

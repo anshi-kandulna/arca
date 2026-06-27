@@ -102,6 +102,7 @@ CREATE TABLE evidence (
   map_id          UUID NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
   submitted_by    UUID REFERENCES users(id) ON DELETE SET NULL,
   file_name       TEXT,
+  file_path       TEXT,
   notes           TEXT,
   submitted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -113,12 +114,14 @@ CREATE TABLE validation_verdicts (
   confidence       INTEGER,
   reasoning        TEXT,
   missing_elements JSONB,
+  signal_breakdown JSONB,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE audit_logs (
     id UUID PRIMARY KEY,
     bank_id UUID NOT NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     actor VARCHAR NOT NULL,
     actor_role VARCHAR NOT NULL,
     action VARCHAR NOT NULL,

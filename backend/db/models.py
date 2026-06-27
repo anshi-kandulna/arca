@@ -87,6 +87,7 @@ class Evidence(Base):
     map_id = Column(UUID(as_uuid=True), ForeignKey("maps.id"))
     submitted_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     file_name = Column(String)
+    file_path = Column(String)
     notes = Column(String)
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
@@ -98,12 +99,14 @@ class ValidationVerdict(Base):
     confidence = Column(Integer)
     reasoning = Column(String)
     missing_elements = Column(JSONB)
+    signal_breakdown = Column(JSONB)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bank_id = Column(UUID(as_uuid=True), ForeignKey("banks.id"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     actor = Column(String, nullable=False)
     actor_role = Column(String, nullable=False)
     action = Column(String, nullable=False)

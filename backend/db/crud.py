@@ -68,11 +68,12 @@ def get_business_vertical(db: Session, vertical_id: str):
     return db.query(models.BusinessVertical).filter(models.BusinessVertical.id == vertical_id).first()
 
 # Evidence Operations
-def create_evidence(db: Session, map_id: str, submitted_by: str, file_name: str, notes: str):
+def create_evidence(db: Session, map_id: str, submitted_by: str, file_name: str, file_path: str, notes: str):
     db_evidence = models.Evidence(
         map_id=map_id,
         submitted_by=submitted_by,
         file_name=file_name,
+        file_path=file_path,
         notes=notes
     )
     db.add(db_evidence)
@@ -87,13 +88,14 @@ def get_evidence(db: Session, evidence_id: str):
     return db.query(models.Evidence).filter(models.Evidence.id == evidence_id).first()
 
 # Validation Verdict Operations
-def create_validation_verdict(db: Session, evidence_id: str, verdict: str, confidence: int, reasoning: str, missing_elements: list):
+def create_validation_verdict(db: Session, evidence_id: str, verdict: str, confidence: int, reasoning: str, missing_elements: list, signal_breakdown: list = None):
     db_validation = models.ValidationVerdict(
         evidence_id=evidence_id,
         verdict=verdict,
         confidence=confidence,
         reasoning=reasoning,
-        missing_elements=missing_elements
+        missing_elements=missing_elements,
+        signal_breakdown=signal_breakdown
     )
     db.add(db_validation)
     db.commit()
@@ -114,6 +116,7 @@ def create_audit_log(
     actor_role: str, 
     action: str, 
     action_type: str, 
+    user_id: str = None,
     circular_ref: str = None, 
     map_ref: str = None, 
     business_vertical: str = None, 
@@ -121,6 +124,7 @@ def create_audit_log(
 ):
     db_audit = models.AuditLog(
         bank_id=bank_id,
+        user_id=user_id,
         actor=actor,
         actor_role=actor_role,
         action=action,
@@ -135,8 +139,11 @@ def create_audit_log(
     db.refresh(db_audit)
     return db_audit
 
-def get_audit_logs(db: Session, bank_id: str):
-    return db.query(models.AuditLog).filter(models.AuditLog.bank_id == bank_id).order_by(models.AuditLog.created_at.desc()).all()
+def get_audit_logs(db: Session, bank_id: str, user_id: str = None):
+    query = db.query(models.AuditLog).filter(models.AuditLog.bank_id == bank_id)
+    if user_id:
+        query = query.filter(models.AuditLog.user_id == user_id)
+    return query.order_by(models.AuditLog.created_at.desc()).all()
 
 # Notification Operations
 def create_notification(db: Session, bank_id: str, business_vertical: str, message: str):

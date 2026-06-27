@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from typing import Optional
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 import json
@@ -11,6 +12,7 @@ import shutil
 import auth
 from db import database, models, schemas, crud
 from run_pipeline import run_full_pipeline
+from validation_agent.validation_agent import run_validation_background
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,7 +20,7 @@ app = FastAPI(title="ARCA Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Specific origins for dev
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,7 +58,7 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 def process_circular_background(circular_id: str, pdf_path: str, output_json_path: str, bank_id: str):
     try:
-        run_full_pipeline(pdf_path, output_json_path, ollama_model="llama3.2:latest")
+        run_full_pipeline(pdf_path, output_json_path, ollama_model="qwen2.5:7b")
         
         db = database.SessionLocal()
         try:
@@ -151,6 +153,7 @@ async def upload_circular(
         crud.create_audit_log(
             db=db,
             bank_id=str(current_user.bank_id),
+            user_id=str(current_user.id),
             actor=current_user.full_name or current_user.email,
             actor_role=current_user.role,
             action="Circular Uploaded",
@@ -302,6 +305,7 @@ def dispatch_circular(
     crud.create_audit_log(
         db=db,
         bank_id=str(current_user.bank_id),
+        user_id=str(current_user.id),
         actor=current_user.full_name or current_user.email,
         actor_role=current_user.role,
         action="MAPs Dispatched",
@@ -361,9 +365,11 @@ def update_map(
     return {"message": "Map updated successfully", "status": db_map.status}
 
 @app.post("/api/maps/{map_id}/evidence")
-def upload_evidence(
+async def upload_evidence(
     map_id: str,
-    evidence: schemas.EvidenceUpload,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    notes: Optional[str] = Form(None),
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
@@ -371,13 +377,22 @@ def upload_evidence(
     if not db_map:
         raise HTTPException(status_code=404, detail="Map not found")
         
+    # Save file to disk securely
+    uploads_dir = os.path.join(os.path.dirname(__file__), "arca", "uploads", "evidence")
+    os.makedirs(uploads_dir, exist_ok=True)
+    file_path = os.path.join(uploads_dir, file.filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
     # Create Evidence
     db_evidence = crud.create_evidence(
         db=db,
         map_id=db_map.id,
-        submitted_by=current_user.id,
-        file_name=evidence.file_name,
-        notes=evidence.notes
+        submitted_by=str(current_user.id),
+        file_name=file.filename,
+        file_path=file_path,
+        notes=notes
     )
     
     # Update map status
@@ -388,17 +403,19 @@ def upload_evidence(
     crud.create_audit_log(
         db=db,
         bank_id=str(current_user.bank_id),
+        user_id=str(current_user.id),
         actor=current_user.full_name or current_user.email,
         actor_role=current_user.role,
         action="Evidence Submitted",
         action_type="EVIDENCE_SUBMITTED",
         circular_ref=circular.ref_number if circular else None,
-        map_ref=db_map.map_id,
+        map_ref=db_map.map_ref,
         business_vertical=db_map.business_vertical,
-        details=f"Evidence '{evidence.file_name}' submitted for MAP."
+        details=f"Evidence '{file.filename}' submitted for MAP."
     )
     
-    # The actual Validation Agent processing will be integrated here later.
+    # Trigger background validation
+    background_tasks.add_task(run_validation_background, str(db_evidence.id))
 
     return {"message": "Evidence submitted successfully"}
 
@@ -429,6 +446,7 @@ def get_validations(
                     "confidence": verdict.confidence,
                     "reasoning": verdict.reasoning,
                     "missingElements": verdict.missing_elements,
+                    "signalBreakdown": verdict.signal_breakdown,
                     "map_db_id": str(m.id)
                 })
     return results
@@ -501,7 +519,7 @@ def get_audit_logs(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(database.get_db)
 ):
-    logs = crud.get_audit_logs(db, current_user.bank_id)
+    logs = crud.get_audit_logs(db, current_user.bank_id, user_id=str(current_user.id))
     return [
         {
             "id": str(log.id),
