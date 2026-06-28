@@ -111,42 +111,95 @@ def extractMetadata(pages):
     return result
 
 
-def overlapAndExtraction(pages):
+def extractDeadlineContext(pages, max_entries=15):
+    DATE_PATTERNS = [
+        r'\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b',
+        r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b',
+        r'with effect from',
+        r'not later than',
+        r'within \d+ days',
+        r'by (?:the end of|close of business|March|April|May|June|July|August|September|October|November|December)',
+    ]
+    
+    raw_entries = []
+    for page_no in sorted(pages.keys()):
+        items = pages[page_no]
+        for idx, item in enumerate(items):
+            text = item["text"]
+            if any(re.search(p, text, re.IGNORECASE) for p in DATE_PATTERNS):
+                before = items[idx-1]["text"] if idx > 0 else ""
+                after = items[idx+1]["text"] if idx < len(items)-1 else ""
+                entry = f"[p{page_no}] {before} | {text} | {after}".strip()
+                raw_entries.append((page_no, text, entry))  # keep core text for dedup
+
+    # deduplicate by core sentence similarity before capping
+    embedder = get_embedder()
+    seen_embeddings = []
+    unique_entries = []
+    for page_no, core_text, full_entry in raw_entries:
+        emb = embedder.encode(core_text, convert_to_tensor=True)
+        is_dup = any(
+            util.cos_sim(emb, seen).item() > 0.88
+            for seen in seen_embeddings
+        )
+        if not is_dup:
+            seen_embeddings.append(emb)
+            unique_entries.append(full_entry)
+
+    if len(unique_entries) > max_entries:
+        print(f"  Deadline context capped: {len(unique_entries)} → {max_entries}")
+        # sample evenly across doc so you don't lose late-page deadlines
+        step = len(unique_entries) / max_entries
+        unique_entries = [unique_entries[int(i * step)] for i in range(max_entries)]
+
+    print(f"  Deadline context: {len(unique_entries)} sentences")
+    return "\n".join(unique_entries)
+
+
+def overlapAndExtraction(pages, deadline_context):
 
     SYSTEM_PROMPT = """You are a regulatory compliance expert. Extract obligations from RBI circular text.
     Return ONLY valid JSON, nothing else. No explanation, no markdown, no backticks."""
 
-    EXTRACT_PROMPT = """Extract all regulatory obligations from this RBI circular text.
-    Look for keywords: shall, must, are required to, with effect from, not later than, within X days.
+    EXTRACT_PROMPT = """Extract the most important regulatory obligations from this RBI circular text.
+    Only extract MAJOR obligations — directives that require banks to implement a new process, submit a report, or make a structural change.
 
-    IMPORTANT: If multiple sub-points belong to the same clause and have the same responsible party and deadline, consolidate them into ONE MAP. Do not create separate MAPs for each bullet point of the same obligation.
+    DO NOT extract:
+    - Sub-bullets or examples of a larger obligation
+    - Definitions or explanations
+    - Obligations already covered by a previous point
+    - Minor administrative details
 
-    Return this exact JSON structure:
+    CONSOLIDATION RULE: If 3 bullet points all say "banks shall maintain records of X, Y, Z" — that is ONE MAP, not three.
+
+    Key dates and deadlines found across this circular:
+    {deadline_context}
+
+    Return this exact JSON:
     {{
     "maps": [
         {{
-        "action": "what the bank must do",
-        "deadline_raw": "exact deadline or null",
-        "clause_ref": "paragraph reference or clause reference or null",
+        "action": "what the bank must do (one sentence, specific)",
+        "deadline_raw": "exact deadline text or null",
+        "clause_ref": "paragraph or clause reference or null",
         "priority": "HIGH or MEDIUM or LOW"
         }}
     ]
     }}
 
-    If no obligations found, return {{"maps": []}}
+    If no major obligations found, return {{"maps": []}}
 
     Text:
     {text}"""
 
-    all_maps=[]
+    all_maps = []
     failed_pages = []
+    sorted_pages = sorted(pages.keys())
 
-    sorted_pages = sorted(pages.keys()) 
-
-    overall_start=time.time()
+    overall_start = time.time()
     for i, page_no in enumerate(sorted_pages):
         page_text = " ".join(item["text"] for item in pages[page_no])
-        if i>0:
+        if i > 0:
             prev_text = " ".join(item["text"] for item in pages[sorted_pages[i-1]])
             context = prev_text[-200:] + " " + page_text
         else:
@@ -158,7 +211,10 @@ def overlapAndExtraction(pages):
             model="gemma4:e4b",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": EXTRACT_PROMPT.format(text=context)}
+                {"role": "user", "content": EXTRACT_PROMPT.format(
+                    text=context,
+                    deadline_context=deadline_context
+                )}
             ],
             options={"temperature": 0}
         )
@@ -171,12 +227,12 @@ def overlapAndExtraction(pages):
             for m in maps:
                 m["page_no"] = page_no
             all_maps.extend(maps)
-            print(f"  page {page_no}: {time.time()-start:.2f}s | maps found: {len(maps)}")  
+            print(f"  page {page_no}: {time.time()-start:.2f}s | maps found: {len(maps)}")
         except json.JSONDecodeError:
             failed_pages.append(page_no)
-            print(f"  page {page_no}: {time.time()-start:.2f}s | invalid JSON, skipping")  
+            print(f"  page {page_no}: {time.time()-start:.2f}s | invalid JSON, skipping")
 
-    print("total time for extraction : ",time.time()-overall_start)
+    print("total time for extraction:", time.time()-overall_start)
     return all_maps, failed_pages
 
 
@@ -224,26 +280,86 @@ def reconstructingbbox(all_maps, pages):
     return all_maps
 
 
-def deduplicateMaps(all_maps, threshold=0.92):
-    embedder = get_embedder()
-    actions = [m["action"] for m in all_maps]
-    embeddings = embedder.encode(actions, convert_to_tensor=True, show_progress_bar=False)
-    
-    keep = []
-    dropped = 0
-    for i, m in enumerate(all_maps):
-        duplicate = False
-        for j in keep:
-            score = util.cos_sim(embeddings[i], embeddings[j]).item()
-            if score >= threshold:
-                duplicate = True
-                dropped += 1
-                break
-        if not duplicate:
-            keep.append(i)
-    
-    print(f"Deduplication: {len(all_maps)} → {len(keep)} maps ({dropped} dropped)")
-    return [all_maps[i] for i in keep]
+def resolveDeadlines(all_maps, metadata, deadline_context, batch_size=5):
+    circular_date = metadata.get("circular_date")
+
+    RESOLVE_PROMPT = """You are given:
+1. RBI circular date: {circular_date}
+2. All deadline-related sentences from the circular (with page numbers):
+{deadline_context}
+
+3. List of compliance obligations (as JSON):
+{maps_batch}
+
+Task: For each obligation, determine its deadline.
+- If deadline_raw is already a specific date like "March 31 2025", convert to YYYY-MM-DD.
+- If deadline_raw is relative like "within 30 days", compute from circular_date.
+- If deadline_raw is null, scan the deadline sentences for any umbrella deadline on a nearby or earlier page that covers this obligation.
+- If truly unknown, return null.
+
+Return ONLY a JSON array, one entry per obligation, in the same order:
+[
+  {{"temp_id": 0, "deadline_resolved": "YYYY-MM-DD or null", "deadline_reasoning": "one line"}},
+  ...
+]"""
+
+    overall_start = time.time()
+    resolved = 0
+
+    for m in all_maps:
+        if m.get("deadline_raw") and re.match(r'\d{4}-\d{2}-\d{2}', str(m["deadline_raw"])):
+            m["deadline_resolved"] = m["deadline_raw"]
+            m["deadline_reasoning"] = "already resolved"
+            resolved += 1
+
+    unresolved = [m for m in all_maps if "deadline_resolved" not in m]
+    print(f"  Resolving {len(unresolved)} maps in batches of {batch_size}...")
+
+    for i in range(0, len(unresolved), batch_size):
+        batch = unresolved[i:i+batch_size]
+        batch_input = [
+            {
+                "temp_id": idx,
+                "action": m["action"],
+                "deadline_raw": m.get("deadline_raw"),
+                "page_no": m["page_no"]
+            }
+            for idx, m in enumerate(batch)
+        ]
+
+        print(f"  Batch {i//batch_size + 1}/{(len(unresolved)-1)//batch_size + 1}...")
+        response = ollama.chat(
+            model="gemma4:e4b",
+            messages=[
+                {"role": "system", "content": "Return only valid JSON array, no markdown."},
+                {"role": "user", "content": RESOLVE_PROMPT.format(
+                    circular_date=circular_date,
+                    deadline_context=deadline_context,
+                    maps_batch=json.dumps(batch_input, indent=2)
+                )}
+            ],
+            options={"temperature": 0}
+        )
+
+        raw = response["message"]["content"].strip()
+        try:
+            results = json.loads(raw)
+            for r in results:
+                m = batch[r["temp_id"]]
+                m["deadline_resolved"] = r.get("deadline_resolved")
+                m["deadline_reasoning"] = r.get("deadline_reasoning")
+                if m["deadline_resolved"]:
+                    resolved += 1
+        except json.JSONDecodeError:
+            print(f"  Batch {i//batch_size + 1}: JSON parse failed, marking all null")
+            for m in batch:
+                m["deadline_resolved"] = None
+                m["deadline_reasoning"] = "parse failed"
+
+        time.sleep(1)
+
+    print(f"Deadline resolution: {resolved}/{len(all_maps)} resolved in {time.time()-overall_start:.2f}s")
+    return all_maps
 
 
 def addMetadata(metadata, all_maps, pages, failed_pages):
@@ -281,20 +397,22 @@ def addMetadata(metadata, all_maps, pages, failed_pages):
 
 def main():
     print("Starting ARCA extraction pipeline...")
-    doc=doclingSetup()
-    pages=buildingPages(doc)
+    doc = doclingSetup()
+    pages = buildingPages(doc)
     metadata = extractMetadata(pages)
-    all_maps, failed_pages=overlapAndExtraction(pages)
-    all_maps=reconstructingbbox(all_maps, pages)
-    all_maps=deduplicateMaps(all_maps) 
-    final_json=addMetadata(metadata, all_maps, pages, failed_pages)
+
+    deadline_context = extractDeadlineContext(pages)
+
+    all_maps, failed_pages = overlapAndExtraction(pages, deadline_context)
+    all_maps = reconstructingbbox(all_maps, pages)
+    all_maps = resolveDeadlines(all_maps, metadata, deadline_context)
+    final_json = addMetadata(metadata, all_maps, pages, failed_pages)
 
     with open("arca_output2.json", "w", encoding="utf-8") as f:
         json.dump(final_json, f, ensure_ascii=False, indent=2)
 
-    print("json saved as arca_output.json ...")
+    print("json saved as arca_output2.json ...")
 
-    
 
 if __name__ == "__main__":
     main()
