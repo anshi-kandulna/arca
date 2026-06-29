@@ -158,14 +158,11 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={data.deptData} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }} barCategoryGap="20%">
                   <CartesianGrid strokeDasharray="2 2" stroke="#d1d1cf" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fill: '#111', fontSize: 10, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="dept" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={150} />
+                  <XAxis type="number" tick={{ fill: '#111', fontSize: 10, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="dept" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={180} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f4f4f0' }} />
-                  <Bar dataKey="rate" radius={0}>
-                    {data.deptData && data.deptData.map((e: any, i: number) => (
-                      <Cell key={i} fill={e.rate >= 90 ? '#00AA00' : e.rate >= 75 ? '#0028FF' : '#FF5500'} />
-                    ))}
-                  </Bar>
+                  <Bar dataKey="completed" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} name="Completed" />
+                  <Bar dataKey="pending" stackId="a" fill="#eab308" radius={[0, 4, 4, 0]} name="Pending" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

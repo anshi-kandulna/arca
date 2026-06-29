@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import FileResponse
 from typing import Optional
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
@@ -101,9 +102,14 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
                         "sub_vertical": map_item.get("sub_vertical"),
                         "routing_confidence": map_item.get("routing_confidence"),
                         "deadline_raw": map_item.get("deadline_raw"),
+                        "deadline_resolved": map_item.get("deadline_resolved"),
+                        "deadline_reasoning": map_item.get("deadline_reasoning"),
                         "clause_ref": map_item["clause_ref"],
                         "priority": map_item["priority"],
-                        "page_no": map_item["page_no"]
+                        "page_no": map_item.get("page_no"),
+                        "matched_text": map_item.get("matched_text"),
+                        "bbox": map_item.get("bbox"),
+                        "routing_reasoning": map_item.get("routing_reasoning")
                     }
                     
                     existing_map = crud.get_map_by_ref(db, bank_id=bank_id, map_ref=map_item["map_id"])
@@ -152,7 +158,7 @@ async def upload_circular(
             bank_id=current_user.bank_id,
             ref_number=f"UPL-{uuid.uuid4().hex[:6]}",
             title=file.filename,
-            file_path=file.filename
+            file_path=pdf_path
         )
         
         # Audit Log
@@ -227,7 +233,9 @@ def get_dashboard_stats(
     for dept, stats in dept_stats.items():
         dept_data.append({
             "dept": dept,
-            "rate": round((stats["compliant"] / max(stats["total"], 1)) * 100, 1)
+            "rate": round((stats["compliant"] / max(stats["total"], 1)) * 100, 1),
+            "completed": stats["compliant"],
+            "pending": stats["total"] - stats["compliant"]
         })
             
     # Priority summary for trend Data (mocking trend for now as fallback)
@@ -269,6 +277,27 @@ def get_dashboard_stats(
             } for c in circulars
         ]
     }
+
+@app.get("/api/circulars/{circular_id}/pdf")
+def get_circular_pdf(
+    circular_id: str,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    circular = crud.get_circular(db, circular_id)
+    if not circular or not circular.file_path:
+        raise HTTPException(status_code=404, detail="PDF not found")
+        
+    actual_path = circular.file_path
+    if not os.path.exists(actual_path):
+        # Fallback for old records that only stored filename
+        fallback_path = os.path.join(os.path.dirname(__file__), "arca", "uploads", circular.file_path)
+        if os.path.exists(fallback_path):
+            actual_path = fallback_path
+        else:
+            raise HTTPException(status_code=404, detail="PDF file missing on disk")
+    
+    return FileResponse(actual_path, media_type="application/pdf", filename=os.path.basename(actual_path))
 
 @app.get("/api/circulars")
 def get_circulars(
@@ -367,13 +396,16 @@ def get_maps(
             "circularId": str(m.circular_id),
             "action": m.obligation_text,
             "department": m.business_vertical,
-            "deadline": m.deadline_raw,
+            "deadline": m.deadline_resolved or m.deadline_raw,
+            "deadlineReasoning": m.deadline_reasoning,
             "priority": m.priority,
             "status": m.status,
             "clauseRef": m.clause_ref,
             "pageNo": m.page_no,
             "matchedText": m.matched_text,
-            "bbox": m.bbox
+            "bbox": m.bbox,
+            "routingConfidence": m.routing_confidence,
+            "routingReasoning": m.routing_reasoning
         } for m in maps
     ]
 
@@ -528,6 +560,14 @@ def decide_validation(
     crud.create_notification(db, bank_id=str(current_user.bank_id), business_vertical=db_map.business_vertical, message=msg)
     
     return {"message": f"Action {decision.action} recorded"}
+
+@app.get("/api/departments")
+def get_departments(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    verticals = db.query(models.BusinessVertical).filter(models.BusinessVertical.bank_id == current_user.bank_id).all()
+    return [v.name for v in verticals]
 
 @app.get("/api/departments/stats")
 def get_departments_stats(
