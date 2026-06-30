@@ -12,7 +12,7 @@ import shutil
 
 import auth
 from db import database, models, schemas, crud
-from run_pipeline import run_full_pipeline
+from run_pipeline_streaming import run_streaming_pipeline
 from validation_agent.validation_agent import run_validation_background
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,7 +59,7 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 def process_circular_background(circular_id: str, pdf_path: str, output_json_path: str, bank_id: str):
     try:
-        run_full_pipeline(pdf_path, output_json_path, ollama_model="qwen2.5:7b")
+        run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b", output_json_path=output_json_path)
         
         db = database.SessionLocal()
         try:
