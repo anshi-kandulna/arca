@@ -86,7 +86,8 @@ def _circular_id_to_filename(cid):
 # ── Main streaming pipeline ───────────────────────────────────────────────────
 
 def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b",
-                           max_workers=4, output_json_path=None):
+                           max_workers=4, output_json_path=None,
+                           on_metadata_extracted=None, on_map_routed=None):
     t_total = time.time()
 
     map_q        = queue.Queue()   # producer → consumer
@@ -116,6 +117,8 @@ def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b",
             meta   = extractMetadata(pages)
             shared["meta"] = meta
             print(f"[extract] {meta.get('circular_id')} — {meta.get('circular_title')}")
+            if on_metadata_extracted:
+                on_metadata_extracted(meta)
 
             deadline_ctx  = extractDeadlineContext(pages)
             sorted_pages  = sorted(pages.keys())
@@ -204,6 +207,8 @@ def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b",
                             with lock:
                                 count[0] += 1
                                 _log_routed(count[0], m)
+                                if on_map_routed:
+                                    on_map_routed(m)
                         break
 
                     # submit to thread pool
@@ -219,6 +224,8 @@ def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b",
                         with lock:
                             count[0] += 1
                             _log_routed(count[0], m)
+                            if on_map_routed:
+                                on_map_routed(m)
 
             shared["routed"] = routed
             print(f"\n[route ] Done — {len(routed)} maps routed.")

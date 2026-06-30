@@ -25,8 +25,9 @@ def doclingSetup():
     )
     print("Converter init:", time.time() - start)
 
-    start = time.time()
-    doc = converter.convert("circular2.pdf").document
+    import os
+    pdf_file = "circular2.pdf" if os.path.exists("circular2.pdf") else "circular.pdf"
+    doc = converter.convert(pdf_file).document
     print("Convert:", time.time() - start)
 
     print(type(doc))

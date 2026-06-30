@@ -58,8 +58,71 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
     return current_user
 
 def process_circular_background(circular_id: str, pdf_path: str, output_json_path: str, bank_id: str):
+    def on_metadata_extracted(meta):
+        db = database.SessionLocal()
+        try:
+            circular = crud.get_circular(db, circular_id)
+            if circular:
+                extracted_ref = meta.get("circular_id")
+                if extracted_ref:
+                    circular.ref_number = extracted_ref
+                extracted_title = meta.get("circular_title")
+                if extracted_title:
+                    circular.title = extracted_title
+                if meta.get("circular_date"):
+                    try:
+                        circular.published_date = datetime.strptime(meta["circular_date"], "%Y-%m-%d").date()
+                    except:
+                        pass
+                db.commit()
+        except Exception as e:
+            print(f"Callback on_metadata_extracted error: {e}")
+        finally:
+            db.close()
+
+    def on_map_routed(map_item):
+        db = database.SessionLocal()
+        try:
+            circular = crud.get_circular(db, circular_id)
+            if not circular:
+                return
+            
+            map_data_dict = {
+                "circular_id": circular.id,
+                "bank_id": bank_id,
+                "map_ref": map_item["map_id"],
+                "obligation_text": map_item["action"],
+                "business_vertical": map_item["department"],
+                "sub_vertical": map_item.get("sub_vertical"),
+                "routing_confidence": map_item.get("routing_confidence"),
+                "deadline_raw": map_item.get("deadline_raw"),
+                "deadline_resolved": map_item.get("deadline_resolved"),
+                "deadline_reasoning": map_item.get("deadline_reasoning"),
+                "clause_ref": map_item["clause_ref"],
+                "priority": map_item["priority"],
+                "page_no": map_item.get("page_no"),
+                "matched_text": map_item.get("matched_text"),
+                "bbox": map_item.get("bbox"),
+                "routing_reasoning": map_item.get("routing_reasoning")
+            }
+            existing_map = crud.get_map_by_ref(db, bank_id=bank_id, map_ref=map_item["map_id"])
+            if existing_map:
+                crud.update_map(db, existing_map, map_data_dict)
+            else:
+                crud.create_map(db, map_data_dict)
+        except Exception as e:
+            print(f"Callback on_map_routed error: {e}")
+        finally:
+            db.close()
+
     try:
-        run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b", output_json_path=output_json_path)
+        run_streaming_pipeline(
+            pdf_path, 
+            ollama_model="qwen2.5:3b", 
+            output_json_path=output_json_path,
+            on_metadata_extracted=on_metadata_extracted,
+            on_map_routed=on_map_routed
+        )
         
         db = database.SessionLocal()
         try:
@@ -71,56 +134,12 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
             
             circular = crud.get_circular(db, circular_id)
             if circular:
-                extracted_ref = data.get("circular_id")
-                if extracted_ref:
-                    circular.ref_number = extracted_ref
-                    
-                extracted_title = data.get("circular_title")
-                if extracted_title:
-                    circular.title = extracted_title
-                    
-                if data.get("circular_date"):
-                    try:
-                        circular.published_date = datetime.strptime(data["circular_date"], "%Y-%m-%d").date()
-                    except:
-                        pass
-                
                 circular.total_pages = data.get("total_pages")
                 circular.page_summary = data.get("page_summary")
                 circular.vertical_summary = data.get("department_summary")
                 circular.sub_vertical_summary = data.get("sub_vertical_summary")
                 circular.priority_summary = data.get("priority_summary")
                 circular.total_obligations = data.get("total_maps", 0)
-                
-                for map_item in data.get("maps", []):
-                    map_data_dict = {
-                        "circular_id": circular.id,
-                        "bank_id": bank_id,
-                        "map_ref": map_item["map_id"],
-                        "obligation_text": map_item["action"],
-                        "business_vertical": map_item["department"],
-                        "sub_vertical": map_item.get("sub_vertical"),
-                        "routing_confidence": map_item.get("routing_confidence"),
-                        "deadline_raw": map_item.get("deadline_raw"),
-                        "deadline_resolved": map_item.get("deadline_resolved"),
-                        "deadline_reasoning": map_item.get("deadline_reasoning"),
-                        "clause_ref": map_item["clause_ref"],
-                        "priority": map_item["priority"],
-                        "page_no": map_item.get("page_no"),
-                        "matched_text": map_item.get("matched_text"),
-                        "bbox": map_item.get("bbox"),
-                        "routing_reasoning": map_item.get("routing_reasoning")
-                    }
-                    
-                    existing_map = crud.get_map_by_ref(db, bank_id=bank_id, map_ref=map_item["map_id"])
-                    if existing_map:
-                        crud.update_map(db, existing_map, map_data_dict)
-                    else:
-                        crud.create_map(db, map_data_dict)
-                    
-                    if map_item["department"] and map_item["department"] != "Unassigned":
-                        # We no longer create notifications here. Notifications are deferred until manual dispatch.
-                        pass
                 
                 crud.update_circular(db, circular, {"status": "pending_review"})
         finally:
@@ -276,6 +295,25 @@ def get_dashboard_stats(
                 "date": c.published_date
             } for c in circulars
         ]
+    }
+
+@app.get("/api/circulars/{circular_id}")
+def get_circular_status(
+    circular_id: str,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    circular = crud.get_circular(db, circular_id)
+    if not circular:
+        raise HTTPException(status_code=404, detail="Circular not found")
+    return {
+        "id": str(circular.id),
+        "title": circular.title,
+        "ref_number": circular.ref_number,
+        "status": circular.status,
+        "published_date": str(circular.published_date) if circular.published_date else None,
+        "total_pages": circular.total_pages,
+        "total_obligations": circular.total_obligations
     }
 
 @app.get("/api/circulars/{circular_id}/pdf")
