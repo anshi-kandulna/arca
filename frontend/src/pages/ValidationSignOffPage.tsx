@@ -9,6 +9,7 @@ import {
   FileText, Brain, ChevronDown, ChevronUp, Bot, Search
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
+import * as mammoth from 'mammoth';
 
 export default function ValidationSignOffPage() {
   const { token } = useAuth();
@@ -127,8 +128,50 @@ export default function ValidationSignOffPage() {
 }
 
 function ValidationCard({ validation, index, onDecide }: { validation: any, index: number, onDecide: (a: string) => void }) {
+  const { token } = useAuth();
   const [expanded, setExpanded] = useState(true);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [evidenceBlobUrl, setEvidenceBlobUrl] = useState<string | null>(null);
+  const [evidenceDocxHtml, setEvidenceDocxHtml] = useState<string | null>(null);
+
+  const toggleEvidence = async () => {
+    if (showEvidence) {
+      setShowEvidence(false);
+      return;
+    }
+    
+    if (!evidenceBlobUrl && !evidenceDocxHtml && validation.evidenceId) {
+      try {
+        const res = await fetch(`http://localhost:8000/api/evidence/${validation.evidenceId}/download`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const ext = validation.evidenceFile.split('.').pop()?.toLowerCase();
+          
+          if (ext === 'docx') {
+            const arrayBuffer = await blob.arrayBuffer();
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            setEvidenceDocxHtml(result.value);
+          } else {
+            // Explicitly set the MIME type to prevent the browser from downloading it
+            let mimeType = 'application/pdf';
+            if (ext === 'png') mimeType = 'image/png';
+            else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+            
+            const typedBlob = new Blob([blob], { type: mimeType });
+            setEvidenceBlobUrl(URL.createObjectURL(typedBlob));
+          }
+        } else {
+          toast.error("Failed to load evidence file");
+        }
+      } catch (err) {
+        console.error("Error loading evidence", err);
+        toast.error("Error loading evidence file");
+      }
+    }
+    setShowEvidence(true);
+  };
 
   const isSatisfied = validation.verdict === 'Satisfied';
   const isPartial = validation.verdict === 'Partial';
@@ -192,7 +235,7 @@ function ValidationCard({ validation, index, onDecide }: { validation: any, inde
                 </div>
                 {validation.evidenceId ? (
                   <button 
-                    onClick={() => setShowEvidence(!showEvidence)}
+                    onClick={toggleEvidence}
                     className="text-sm font-mono font-bold text-black underline decoration-primary underline-offset-4 hover:text-primary text-left"
                   >
                     {validation.evidenceFile} {showEvidence ? "(Hide)" : "(View Inline)"}
@@ -202,12 +245,21 @@ function ValidationCard({ validation, index, onDecide }: { validation: any, inde
                 )}
               </div>
               
-              {showEvidence && validation.evidenceId && (
+              {showEvidence && evidenceBlobUrl && (
                 <div className="mb-4 border border-black h-[400px] w-full bg-black/5">
                   <iframe 
-                    src={`http://localhost:8000/api/evidence/${validation.evidenceId}/download`} 
+                    src={evidenceBlobUrl} 
                     className="w-full h-full border-none"
                     title="Evidence Document"
+                  />
+                </div>
+              )}
+
+              {showEvidence && evidenceDocxHtml && (
+                <div className="mb-4 border border-black max-h-[400px] overflow-y-auto w-full bg-white p-6">
+                  <div 
+                    className="prose prose-sm max-w-none text-black font-sans evidence-docx-viewer" 
+                    dangerouslySetInnerHTML={{ __html: evidenceDocxHtml }} 
                   />
                 </div>
               )}

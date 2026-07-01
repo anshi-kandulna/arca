@@ -527,7 +527,7 @@ def download_evidence(
     if not evidence or not evidence.file_path or not os.path.exists(evidence.file_path):
         raise HTTPException(status_code=404, detail="Evidence file not found")
     from fastapi.responses import FileResponse
-    return FileResponse(evidence.file_path, filename=evidence.file_name)
+    return FileResponse(evidence.file_path, filename=evidence.file_name, content_disposition_type="inline")
 
 @app.get("/api/validations")
 def get_validations(
