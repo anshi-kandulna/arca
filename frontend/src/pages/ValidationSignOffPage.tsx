@@ -128,6 +128,7 @@ export default function ValidationSignOffPage() {
 
 function ValidationCard({ validation, index, onDecide }: { validation: any, index: number, onDecide: (a: string) => void }) {
   const [expanded, setExpanded] = useState(true);
+  const [showEvidence, setShowEvidence] = useState(false);
 
   const isSatisfied = validation.verdict === 'Satisfied';
   const isPartial = validation.verdict === 'Partial';
@@ -189,8 +190,28 @@ function ValidationCard({ validation, index, onDecide }: { validation: any, inde
                 <div className="p-3 bg-black text-white">
                   <FileText size={20} />
                 </div>
-                <span className="text-sm font-mono font-bold text-black underline decoration-primary underline-offset-4 cursor-pointer hover:text-primary">{validation.evidenceFile}</span>
+                {validation.evidenceId ? (
+                  <button 
+                    onClick={() => setShowEvidence(!showEvidence)}
+                    className="text-sm font-mono font-bold text-black underline decoration-primary underline-offset-4 hover:text-primary text-left"
+                  >
+                    {validation.evidenceFile} {showEvidence ? "(Hide)" : "(View Inline)"}
+                  </button>
+                ) : (
+                  <span className="text-sm font-mono font-bold text-black underline decoration-primary underline-offset-4">{validation.evidenceFile}</span>
+                )}
               </div>
+              
+              {showEvidence && validation.evidenceId && (
+                <div className="mb-4 border border-black h-[400px] w-full bg-black/5">
+                  <iframe 
+                    src={`http://localhost:8000/api/evidence/${validation.evidenceId}/download`} 
+                    className="w-full h-full border-none"
+                    title="Evidence Document"
+                  />
+                </div>
+              )}
+
               {validation.evidenceNotes && <p className="text-sm font-sans text-black/80 mt-4 bg-[#fbfbfa] p-4 border-l-2 border-black">"{validation.evidenceNotes}"</p>}
             </div>
           </div>

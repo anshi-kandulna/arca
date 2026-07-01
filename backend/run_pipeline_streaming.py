@@ -14,7 +14,7 @@ Time saved: (n_pages - 1) × per_page_routing_time  (routing overlaps extraction
 
 Usage:
   python backend/run_pipeline_streaming.py --pdf backend/circulars/circular.pdf
-  python backend/run_pipeline_streaming.py --pdf backend/circulars/circular.pdf --model qwen2.5:3b --workers 4
+  python backend/run_pipeline_streaming.py --pdf backend/circulars/circular.pdf --model qwen2.5:7b --workers 4
 """
 
 import sys, os, re, json, time, queue, shutil, threading
@@ -85,7 +85,7 @@ def _circular_id_to_filename(cid):
 
 # ── Main streaming pipeline ───────────────────────────────────────────────────
 
-def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b",
+def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:7b",
                            max_workers=4, output_json_path=None,
                            on_metadata_extracted=None, on_map_routed=None):
     t_total = time.time()
@@ -177,8 +177,8 @@ def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:3b",
             def route_one(m):
                 # inject circular context once metadata is available
                 meta = shared.get("meta", {})
-                if meta and not agent.llm_router.circular_context:
-                    agent.llm_router.circular_context = [
+                if meta and not agent.llm.circular_context:
+                    agent.llm.circular_context = [
                         x for x in [meta.get("circular_id",""),
                                      meta.get("circular_title","")] if x]
                 res = agent.route_map(m)
@@ -305,7 +305,7 @@ if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser(description="ARCA Streaming Pipeline")
     p.add_argument("--pdf",         required=True,          help="Path to circular PDF")
-    p.add_argument("--model",       default="qwen2.5:3b",   help="Ollama routing model")
+    p.add_argument("--model",       default="qwen2.5:7b",   help="Ollama routing model")
     p.add_argument("--workers",     type=int, default=4,    help="Parallel routing workers")
     p.add_argument("--output_json", default=None,           help="Override output path")
     args = p.parse_args()

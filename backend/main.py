@@ -118,7 +118,7 @@ def process_circular_background(circular_id: str, pdf_path: str, output_json_pat
     try:
         run_streaming_pipeline(
             pdf_path, 
-            ollama_model="qwen2.5:3b", 
+            ollama_model="qwen2.5:7b", 
             output_json_path=output_json_path,
             on_metadata_extracted=on_metadata_extracted,
             on_map_routed=on_map_routed
@@ -517,6 +517,18 @@ async def upload_evidence(
 
     return {"message": "Evidence submitted successfully"}
 
+@app.get("/api/evidence/{evidence_id}/download")
+def download_evidence(
+    evidence_id: str,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    evidence = crud.get_evidence(db, evidence_id)
+    if not evidence or not evidence.file_path or not os.path.exists(evidence.file_path):
+        raise HTTPException(status_code=404, detail="Evidence file not found")
+    from fastapi.responses import FileResponse
+    return FileResponse(evidence.file_path, filename=evidence.file_name)
+
 @app.get("/api/validations")
 def get_validations(
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -538,6 +550,7 @@ def get_validations(
                     "circularRef": circ.ref_number if circ else "",
                     "mapAction": m.obligation_text,
                     "department": m.business_vertical,
+                    "evidenceId": str(evidence.id),
                     "evidenceFile": evidence.file_name,
                     "evidenceNotes": evidence.notes,
                     "verdict": verdict.verdict,
