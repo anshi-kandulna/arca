@@ -9,6 +9,7 @@ import os
 import uuid
 import uvicorn
 import shutil
+import threading
 
 import auth
 from db import database, models, schemas, crud
@@ -29,6 +30,25 @@ app.add_middleware(
 
 # Initialize DB (in a real app we'd use Alembic)
 models.Base.metadata.create_all(bind=database.engine)
+
+# ---------------------------------------------------------------------------
+# Routing Agent singleton — initialized lazily on first feedback call.
+# RoutingAgent.__init__ pre-computes scope embeddings (~20s) so we do it
+# once and reuse across all feedback requests.
+# ---------------------------------------------------------------------------
+_routing_agent = None
+_routing_agent_lock = threading.Lock()
+
+def _get_routing_agent():
+    global _routing_agent
+    if _routing_agent is None:
+        with _routing_agent_lock:
+            if _routing_agent is None:
+                from routing_agent.routing_agent import RoutingAgent
+                print("[FeedbackLoop] Initializing RoutingAgent singleton...")
+                _routing_agent = RoutingAgent(ollama_model="qwen2.5:3b")
+                print("[FeedbackLoop] RoutingAgent ready.")
+    return _routing_agent
 
 @app.post("/api/login", response_model=schemas.Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
@@ -461,6 +481,90 @@ def update_map(
     update_data = map_update.dict(exclude_unset=True)
     crud.update_map(db, db_map, update_data)
     return {"message": "Map updated successfully", "status": db_map.status}
+
+@app.post("/api/maps/{map_id}/feedback")
+def submit_map_feedback(
+    map_id: str,
+    feedback: schemas.MapFeedback,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Called when a Compliance Officer corrects the routing agent's department
+    assignment.  Persists the correction to the DB and asynchronously teaches
+    the routing agent so it generalises to future similar actions.
+    """
+    if current_user.role not in ["compliance_officer", "system_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to submit routing feedback")
+
+    db_map = crud.get_map(db, map_id)
+    if not db_map:
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    action          = db_map.obligation_text
+    corrected_dept  = feedback.corrected_department
+    corrected_sv    = feedback.corrected_sub_vertical   # may be None
+    reasoning       = feedback.reasoning or f"Manually corrected by {current_user.full_name or current_user.email}"
+    original_dept   = db_map.business_vertical or "Unknown"
+
+    # 1. Persist corrected department to DB immediately
+    crud.update_map(db, db_map, {"business_vertical": corrected_dept})
+
+    # 2. Audit log
+    circular = crud.get_circular(db, str(db_map.circular_id))
+    crud.create_audit_log(
+        db=db,
+        bank_id=str(current_user.bank_id),
+        user_id=str(current_user.id),
+        actor=current_user.full_name or current_user.email,
+        actor_role=current_user.role,
+        action="Routing Corrected",
+        action_type="ROUTING_FEEDBACK",
+        circular_ref=circular.ref_number if circular else None,
+        map_ref=db_map.map_ref,
+        business_vertical=corrected_dept,
+        details=(
+            f"Routing corrected: '{original_dept}' → '{corrected_dept}'"
+            + (f" / '{corrected_sv}'" if corrected_sv else "")
+            + f".  Reason: {reasoning}"
+        )
+    )
+
+    # 3. Teach the routing agent in background (so HTTP response is instant)
+    def _record_feedback():
+        try:
+            agent = _get_routing_agent()
+
+            sv = corrected_sv
+            if not sv:
+                # Infer the best sub-vertical within the corrected department
+                embed_result = agent.embedder.route(action)
+                for candidate in embed_result["ranked_sub_verticals"]:
+                    if candidate["department"] == corrected_dept:
+                        sv = candidate["sub_vertical"]
+                        break
+                if not sv:
+                    sv = f"{corrected_dept} General"
+
+            agent.resolve_ambiguous_case(
+                action=action,
+                assigned_dept=corrected_dept,
+                assigned_sub_vertical=sv,
+                reasoning=reasoning
+            )
+            print(f"[FeedbackLoop] Learned: '{action[:60]}' → {corrected_dept} / {sv}")
+        except Exception as e:
+            print(f"[FeedbackLoop] Failed to record correction: {type(e).__name__}: {e}")
+
+    background_tasks.add_task(_record_feedback)
+
+    return {
+        "message": "Feedback recorded. Routing agent will learn from this correction.",
+        "corrected_department": corrected_dept,
+        "corrected_sub_vertical": corrected_sv
+    }
+
 
 @app.post("/api/maps/{map_id}/evidence")
 async def upload_evidence(

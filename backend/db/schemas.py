@@ -41,6 +41,11 @@ class ValidationDecision(BaseModel):
     action: str # "Confirm Close", "Override", "Request Resubmission"
     reasoning: Optional[str] = None
 
+class MapFeedback(BaseModel):
+    corrected_department: str
+    corrected_sub_vertical: Optional[str] = None   # if omitted, agent infers best SV within dept
+    reasoning: Optional[str] = None
+
 class Notification(BaseModel):
     id: UUID
     bank_id: UUID

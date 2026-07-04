@@ -694,6 +694,12 @@ function MAPReviewPageInner() {
   const dispatchedCount = currentMaps.filter((m) => !['pending', 'approved', 'rejected', 'edited', 'draft'].includes(m.status)).length;
 
   async function updateMap(mapId: string, updates: Partial<MAP>) {
+    // Capture original department BEFORE state update so we can detect a real change
+    const originalMap = (maps[selectedCircularId] || []).find(m => m.id === mapId);
+    const departmentChanged =
+      updates.department !== undefined &&
+      updates.department !== originalMap?.department;
+
     setMaps((prev) => ({
       ...prev,
       [selectedCircularId]: prev[selectedCircularId].map((m) =>
@@ -718,6 +724,21 @@ function MAPReviewPageInner() {
         },
         body: JSON.stringify(backendUpdates)
       });
+
+      // Only teach the routing agent when the department actually changed
+      if (departmentChanged && updates.status === 'edited') {
+        fetch(`http://localhost:8000/api/maps/${mapId}/feedback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            corrected_department: updates.department,
+            reasoning: `Compliance officer corrected routing: ${originalMap?.department} → ${updates.department}`
+          })
+        }).catch(err => console.warn('[ARCA] Feedback call failed (non-blocking):', err));
+      }
     } catch (err) {
       console.error("Failed to update map", err);
       toast.error("Failed to update MAP in database");

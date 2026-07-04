@@ -299,23 +299,24 @@ class RoutingAgent:
         Favors LLM reasoning (65% LLM weight, 35% Embedding weight).
         """
         sim_dept = embed_result["dept_scores"].get(assigned_dept, 0.0)
-        
+
         # 1. Strength (Absolute similarity match)
-        SIM_FLOOR = 0.40
-        SIM_CEIL  = 0.90
+        # Must match EmbeddingRouter recalibration (SIM_FLOOR=0.35, SIM_CEIL=0.70)
+        SIM_FLOOR = 0.35
+        SIM_CEIL  = 0.70
         strength = max(0.0, min(1.0, (sim_dept - SIM_FLOOR) / (SIM_CEIL - SIM_FLOOR)))
-        
+
         # 2. Clarity (Margin relative to the best option)
         top_dept = embed_result["department"]
         top_sim  = embed_result["top_sim"]
-        
+
         if assigned_dept == top_dept:
             margin = embed_result["margin"]
         else:
             # Conflict: negative margin penalizes the score
             margin = sim_dept - top_sim
-            
-        clarity = max(-1.0, min(1.0, margin / 0.15))
+
+        clarity = max(-1.0, min(1.0, margin / 0.08))   # MARGIN_FULL=0.08 (was 0.15)
         
         # 3. Calculate embedding confidence component
         embed_component = round((0.55 * strength + 0.45 * clarity) * 100)
