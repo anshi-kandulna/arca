@@ -8,6 +8,32 @@ from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from sentence_transformers import SentenceTransformer, util
 
+def _safe_parse_json(raw: str):
+    """Parse JSON from LLM output, stripping markdown fences and other wrapping."""
+    text = raw.strip()
+    # Strip markdown code fences: ```json ... ``` or ``` ... ```
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    # Strip any leading/trailing non-JSON characters
+    text = text.strip()
+    # Find the first { or [ and last } or ]
+    start_obj = text.find('{')
+    start_arr = text.find('[')
+    if start_obj == -1 and start_arr == -1:
+        raise json.JSONDecodeError("No JSON object or array found", text, 0)
+    if start_arr == -1 or (start_obj != -1 and start_obj < start_arr):
+        # JSON object
+        end = text.rfind('}')
+        if end == -1:
+            raise json.JSONDecodeError("No closing brace found", text, 0)
+        return json.loads(text[start_obj:end+1])
+    else:
+        # JSON array
+        end = text.rfind(']')
+        if end == -1:
+            raise json.JSONDecodeError("No closing bracket found", text, 0)
+        return json.loads(text[start_arr:end+1])
+
 
 def doclingSetup():
     print("\nLoading PDF with Docling...")
@@ -26,7 +52,9 @@ def doclingSetup():
     print("Converter init:", time.time() - start)
 
     import os
-    pdf_file = "circular2.pdf" if os.path.exists("circular2.pdf") else "circular.pdf"
+    pdf_file = "circular.pdf"
+    if not os.path.exists(pdf_file):
+        raise FileNotFoundError(f"Expected PDF at '{pdf_file}' but not found.")
     doc = converter.convert(pdf_file).document
     print("Convert:", time.time() - start)
 
@@ -76,14 +104,19 @@ def buildingPages(doc):
 def extractMetadata(pages):
     circular_id = None
     
-    for item in pages[1]:
+    # Use page 1 if available, otherwise fall back to the first available page
+    first_page_no = 1 if 1 in pages else min(pages.keys()) if pages else None
+    if first_page_no is None:
+        return {"circular_id": None, "circular_date": None, "circular_title": None}
+    
+    for item in pages[first_page_no]:
         text = item["text"].strip()
 
         if re.match(r'^RBI/', text):
             circular_id = text
             break
 
-    page1_text = " ".join(item["text"] for item in pages[1])
+    page1_text = " ".join(item["text"] for item in pages[first_page_no])
     response = ollama.chat(
             model="gemma4:e4b",
             messages=[
@@ -100,8 +133,9 @@ def extractMetadata(pages):
     raw = response["message"]["content"].strip()
 
     try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
+        result = _safe_parse_json(raw)
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"  [extractMetadata] JSON parse failed: {e}. Raw: {raw[:200]}")
         result = {
             "circular_date": None,
             "circular_title": None
@@ -223,15 +257,15 @@ def overlapAndExtraction(pages, deadline_context):
         raw = response["message"]["content"].strip()
 
         try:
-            result = json.loads(raw)
-            maps = result.get("maps", [])
+            result = _safe_parse_json(raw)
+            maps = result.get("maps", []) if isinstance(result, dict) else []
             for m in maps:
                 m["page_no"] = page_no
             all_maps.extend(maps)
             print(f"  page {page_no}: {time.time()-start:.2f}s | maps found: {len(maps)}")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, Exception) as e:
             failed_pages.append(page_no)
-            print(f"  page {page_no}: {time.time()-start:.2f}s | invalid JSON, skipping")
+            print(f"  page {page_no}: {time.time()-start:.2f}s | JSON parse failed: {e}. Raw: {raw[:200]}")
 
     print("total time for extraction:", time.time()-overall_start)
     return all_maps, failed_pages
@@ -344,15 +378,20 @@ Return ONLY a JSON array, one entry per obligation, in the same order:
 
         raw = response["message"]["content"].strip()
         try:
-            results = json.loads(raw)
-            for r in results:
-                m = batch[r["temp_id"]]
-                m["deadline_resolved"] = r.get("deadline_resolved")
-                m["deadline_reasoning"] = r.get("deadline_reasoning")
-                if m["deadline_resolved"]:
-                    resolved += 1
-        except json.JSONDecodeError:
-            print(f"  Batch {i//batch_size + 1}: JSON parse failed, marking all null")
+            results = _safe_parse_json(raw)
+            if isinstance(results, dict):
+                results = results.get("results", results.get("deadlines", []))
+            if isinstance(results, list):
+                for r in results:
+                    tid = r.get("temp_id", 0)
+                    if tid < len(batch):
+                        m = batch[tid]
+                        m["deadline_resolved"] = r.get("deadline_resolved")
+                        m["deadline_reasoning"] = r.get("deadline_reasoning")
+                        if m["deadline_resolved"]:
+                            resolved += 1
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"  Batch {i//batch_size + 1}: JSON parse failed ({e}), marking all null")
             for m in batch:
                 m["deadline_resolved"] = None
                 m["deadline_reasoning"] = "parse failed"
@@ -409,10 +448,10 @@ def main():
     all_maps = resolveDeadlines(all_maps, metadata, deadline_context)
     final_json = addMetadata(metadata, all_maps, pages, failed_pages)
 
-    with open("arca_output2.json", "w", encoding="utf-8") as f:
+    with open("arca_output.json", "w", encoding="utf-8") as f:
         json.dump(final_json, f, ensure_ascii=False, indent=2)
 
-    print("json saved as arca_output2.json ...")
+    print("json saved as arca_output.json ...")
 
 
 if __name__ == "__main__":

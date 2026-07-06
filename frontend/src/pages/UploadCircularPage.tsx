@@ -84,6 +84,14 @@ export default function UploadCircularPage() {
                 return logs;
               });
             } else if (circData.status === 'pending_review') {
+              // Do one final maps fetch before declaring success
+              const finalMapsRes = await fetch(`http://localhost:8000/api/maps?circular_id=${circularId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (finalMapsRes.ok) {
+                const finalMapsData = await finalMapsRes.json();
+                setExtractedMaps(finalMapsData);
+              }
               setStatus('success');
               clearInterval(interval);
               return;
@@ -94,7 +102,7 @@ export default function UploadCircularPage() {
             }
           }
 
-          // 2. Fetch currently extracted maps
+          // 2. Fetch currently extracted maps (only if processing is underway)
           const mapsRes = await fetch(`http://localhost:8000/api/maps?circular_id=${circularId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -119,7 +127,7 @@ export default function UploadCircularPage() {
         } catch (error) {
           console.error('Polling error:', error);
         }
-      }, 2000);
+      }, 10000);
     }
 
     return () => clearInterval(interval);

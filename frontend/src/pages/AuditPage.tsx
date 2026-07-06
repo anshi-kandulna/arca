@@ -127,21 +127,6 @@ export default function AuditTrailPage() {
           </div>
         </div>
 
-        {/* Stats - Brutalist */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Events', value: auditLog.length, color: 'text-black', border: 'border-black' },
-            { label: 'Human Actions', value: auditLog.filter(e => e.actor !== 'ARCA System').length, color: 'text-primary', border: 'border-primary' },
-            { label: 'System Events', value: auditLog.filter(e => e.actor === 'ARCA System').length, color: 'text-info', border: 'border-info' },
-            { label: 'Escalations', value: auditLog.filter(e => e.actionType === 'escalation').length, color: 'text-danger', border: 'border-danger' },
-          ].map((stat, idx) => (
-            <div key={stat.label} className={`card-elevated bg-white p-5 border ${stat.border} stagger-${idx + 1}`}>
-              <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-black/60 mb-2">{stat.label}</p>
-              <p className={`text-4xl font-mono font-bold ${stat.color}`}>{stat.value}</p>
-            </div>
-          ))}
-        </div>
-
         {/* Filters - Brutalist */}
         <div className="flex flex-col md:flex-row gap-0 border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="relative flex-1 border-b md:border-b-0 md:border-r border-black">

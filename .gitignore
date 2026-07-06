@@ -74,3 +74,4 @@ lerna-debug.log*
 *.pdf
 *.xlsx
 *.csv
+*.json

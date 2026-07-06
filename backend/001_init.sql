@@ -160,20 +160,36 @@ CREATE INDEX idx_maps_bank_status ON maps(bank_id, status);
 
 CREATE OR REPLACE FUNCTION update_circular_obligation_counts()
 RETURNS TRIGGER AS $$
+DECLARE
+  total_maps INT;
+  completed_maps INT;
 BEGIN
+  -- Count total and completed MAPs
+  SELECT COUNT(*) INTO total_maps
+  FROM maps
+  WHERE circular_id = COALESCE(NEW.circular_id, OLD.circular_id);
+  
+  SELECT COUNT(*) INTO completed_maps
+  FROM maps
+  WHERE circular_id = COALESCE(NEW.circular_id, OLD.circular_id)
+    AND status IN ('closed', 'rejected');
+  
+  -- Update circular counts and status
   UPDATE circulars
   SET
-    total_obligations = (
-      SELECT COUNT(*) FROM maps
-      WHERE circular_id = COALESCE(NEW.circular_id, OLD.circular_id)
-    ),
-    completed_obligations = (
-      SELECT COUNT(*) FROM maps
-      WHERE circular_id = COALESCE(NEW.circular_id, OLD.circular_id)
-        AND status = 'closed'
-    ),
+    total_obligations = total_maps,
+    completed_obligations = completed_maps,
+    status = CASE
+      -- If all MAPs are completed, mark circular as completed
+      WHEN total_maps > 0 AND completed_maps = total_maps THEN 'completed'
+      -- If circular is in_progress and has completed MAPs, keep in_progress
+      WHEN status = 'in_progress' THEN 'in_progress'
+      -- Otherwise keep existing status
+      ELSE status
+    END,
     updated_at = NOW()
   WHERE id = COALESCE(NEW.circular_id, OLD.circular_id);
+  
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

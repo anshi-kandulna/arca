@@ -25,7 +25,7 @@ function CustomTooltip({ active, payload }: any) {
     <div className="bg-black text-white px-3 py-2 border-none">
       {payload.map((p: any, i: number) => (
         <p key={i} className="text-xs font-mono uppercase tracking-widest">
-          {p.name}: <span className="text-primary">{p.value}%</span>
+          {p.name}: <span className="text-primary">{p.value}</span>
         </p>
       ))}
     </div>
@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   
   const [data, setData] = useState<any>({
-    metrics: { gate1: 0, overdue: 0, compliance: 0, deadlines: 0 },
+    metrics: { gate1: 0, compliance: 0, deadlines: 0 },
     trendData: [],
     deptData: [],
     recent_circulars: []
@@ -58,7 +58,6 @@ export default function DashboardPage() {
 
   const metricsArray = [
     { id: 'gate1', label: 'Gate 1 Queue', value: data.metrics.gate1, unit: 'MAPs', icon: FileSearch, variant: 'warning', href: '/map-review-screen' },
-    { id: 'overdue', label: 'Overdue Executions', value: data.metrics.overdue, unit: 'Tasks', icon: AlertTriangle, variant: 'danger', href: null },
     { id: 'compliance', label: 'Compliance Index', value: data.metrics.compliance, unit: '%', icon: TrendingUp, variant: 'success', href: null },
     { id: 'deadlines', label: 'Upcoming Target', value: data.metrics.deadlines, unit: 'Tasks', icon: Clock, variant: 'info', href: null },
   ];

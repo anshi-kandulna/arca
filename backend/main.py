@@ -241,19 +241,21 @@ def get_dashboard_stats(
     circulars = crud.get_circulars_by_bank(db, current_user.bank_id)
     maps = crud.get_maps_by_bank(db, current_user.bank_id)
     
-    # Upcoming MAPs (not closed)
-    upcoming_maps = [m for m in maps if m.status != 'closed']
+    # Upcoming MAPs (not closed or rejected)
+    upcoming_maps = [m for m in maps if m.status not in ['closed', 'rejected']]
     upcoming_count = len(upcoming_maps)
     
     # Overdue
     overdue_count = 0
     
-    # Calculate compliance rate
+    # Calculate compliance rate using actual database counts
+    # The trigger counts 'closed' and 'rejected' MAPs as completed
     total_obligations = sum(c.total_obligations or 0 for c in circulars)
     completed_obligations = sum(c.completed_obligations or 0 for c in circulars)
     compliance_rate = 0 if total_obligations == 0 else round((completed_obligations / total_obligations) * 100, 1)
     
     # Department health using all maps
+    # MAPs with status 'closed' or 'rejected' are considered compliant
     verticals = db.query(models.BusinessVertical).filter(models.BusinessVertical.bank_id == current_user.bank_id).all()
     dept_stats = {}
     
@@ -265,7 +267,7 @@ def get_dashboard_stats(
         if dept not in dept_stats:
             dept_stats[dept] = {"total": 0, "compliant": 0}
         dept_stats[dept]["total"] += 1
-        if m.status == 'closed':
+        if m.status in ['closed', 'rejected']:
             dept_stats[dept]["compliant"] += 1
             
     dept_data = []
@@ -365,13 +367,9 @@ def get_circulars(
     circulars = crud.get_circulars_by_bank(db, current_user.bank_id)
     result = []
     for c in circulars:
-        maps = crud.get_maps_by_bank(db, current_user.bank_id, str(c.id))
-        total = len(maps)
-        # Any map that has moved past the draft/rejected stage is considered "completed" from the Compliance Officer's initial review perspective, 
-        # or we consider it completed when it's fully closed. But since the progress bar is out of "total MAPs" dispatched or processed,
-        # let's count anything that is not draft, pending, or rejected.
-        completed = len([m for m in maps if m.status not in ["draft", "pending", "rejected"]])
-        
+        # Use actual database counts maintained by trigger
+        # Trigger counts 'closed' and 'rejected' MAPs as completed
+        # because rejected MAPs require no work
         result.append({
             "id": str(c.id),
             "refNumber": c.ref_number,
@@ -379,8 +377,8 @@ def get_circulars(
             "category": c.category or "General",
             "publishedDate": str(c.published_date),
             "detectedDate": str(c.created_at),
-            "totalObligations": total if total > 0 else c.total_obligations,
-            "completedObligations": completed,
+            "totalObligations": c.total_obligations or 0,
+            "completedObligations": c.completed_obligations or 0,
             "status": c.status if c.status in ['pending_review', 'in_progress', 'completed', 'overdue'] else 'pending_review',
             "arcaConfidence": 95, # Mock confidence
             "priority": c.priority
@@ -743,7 +741,7 @@ def get_departments_stats(
             stats[v] = {"total": 0, "completed": 0, "pending": 0, "overdue": 0}
             
         stats[v]["total"] += 1
-        if m.status in ["closed", "verified"]:
+        if m.status in ["closed", "rejected"]:
             stats[v]["completed"] += 1
         elif m.status == "overdue":
             stats[v]["overdue"] += 1

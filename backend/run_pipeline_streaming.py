@@ -70,8 +70,11 @@ def _extract_one_page(page_no, pages, sorted_pages, deadline_context):
     )
     raw = resp["message"]["content"].strip()
     try:
-        maps = json.loads(raw).get("maps", [])
-    except json.JSONDecodeError:
+        from extract import _safe_parse_json
+        result = _safe_parse_json(raw)
+        maps = result.get("maps", []) if isinstance(result, dict) else []
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"  [extract] page {page_no}: JSON parse failed: {e}. Raw: {raw[:200]}")
         maps = []
     for m in maps:
         m["page_no"] = page_no
@@ -99,7 +102,7 @@ def run_streaming_pipeline(pdf_path, ollama_model="qwen2.5:7b",
     def producer():
         try:
             # Copy PDF so extract functions can find it
-            target = os.path.join(MAP_AGENT_DIR, "circular2.pdf")
+            target = os.path.join(MAP_AGENT_DIR, "circular.pdf")
             if os.path.abspath(pdf_path) != os.path.abspath(target):
                 shutil.copy(pdf_path, target)
 

@@ -146,8 +146,7 @@ def run_full_pipeline(pdf_path, output_json_path=None, ollama_model="qwen2.5:7b"
         text=True,
     )
     if result.returncode != 0:
-        print("Error: extraction failed.")
-        return
+        raise RuntimeError(f"MAP extraction script failed with exit code {result.returncode}. Check extraction logs.")
 
     intermediate_json = os.path.join(MAP_AGENT_DIR, "arca_output.json")
 
