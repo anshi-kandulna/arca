@@ -137,15 +137,35 @@ export default function DashboardPage() {
               <span className="text-[10px] font-mono font-bold px-2 py-1 bg-black text-white uppercase tracking-widest">30 Days</span>
             </div>
             <div className="p-6 flex-1">
-              <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={data.trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="#d1d1cf" vertical={false} />
-                  <XAxis dataKey="week" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace' }} axisLine={false} tickLine={false} dy={10} />
-                  <YAxis domain={[0, 100]} tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} dx={-10} />
-                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#111', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                  <Area type="monotone" dataKey="rate" stroke="#FF3300" strokeWidth={3} fill="transparent" activeDot={{ r: 6, fill: '#FF3300', stroke: '#111', strokeWidth: 2 }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {data.trendData && data.trendData.length > 0 ? (
+                data.trendData.length === 1 ? (
+                  // Single data point - show as large metric instead of chart
+                  <div className="h-[250px] flex flex-col items-center justify-center">
+                    <div className="text-8xl font-mono font-bold text-black tracking-tighter mb-2">
+                      {data.trendData[0].rate}
+                      <span className="text-4xl text-black/60">%</span>
+                    </div>
+                    <p className="text-xs font-mono uppercase tracking-widest text-black/60">Current Compliance Rate</p>
+                    <p className="text-[10px] font-mono text-black/40 mt-4 text-center max-w-md">
+                      Historical trend will appear as more circulars are processed
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <AreaChart data={data.trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="2 2" stroke="#d1d1cf" vertical={false} />
+                      <XAxis dataKey="week" tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace' }} axisLine={false} tickLine={false} dy={10} />
+                      <YAxis domain={[0, 100]} tick={{ fill: '#111', fontSize: 11, fontFamily: 'monospace' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} dx={-10} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#111', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                      <Area type="monotone" dataKey="rate" stroke="#FF3300" strokeWidth={3} fill="transparent" activeDot={{ r: 6, fill: '#FF3300', stroke: '#111', strokeWidth: 2 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )
+              ) : (
+                <div className="h-[250px] flex items-center justify-center">
+                  <p className="text-xs font-mono uppercase tracking-widest text-black/40">No data available</p>
+                </div>
+              )}
             </div>
           </div>
           

@@ -279,13 +279,57 @@ def get_dashboard_stats(
             "pending": stats["total"] - stats["compliant"]
         })
             
-    # Priority summary for trend Data (mocking trend for now as fallback)
-    # Ideally, we would look at historical completion dates.
-    trend_data = [
-        {'week': 'W1', 'rate': max(0, compliance_rate - 10), 'target': 85},
-        {'week': 'W2', 'rate': max(0, compliance_rate - 5), 'target': 85},
-        {'week': 'W3', 'rate': compliance_rate, 'target': 85},
-    ]
+    # Compliance trend data - calculate from actual timestamps
+    # Group by date and calculate compliance rate over time
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    
+    # Get the date range (last 30 days)
+    today = datetime.now().date()
+    start_date = today - timedelta(days=29)  # 30 days including today
+    
+    # Build a timeline of events
+    date_snapshots = defaultdict(lambda: {"total": 0, "completed": 0})
+    
+    # For each circular, determine when it was added and when its MAPs were completed
+    for circular in circulars:
+        circular_date = circular.created_at.date() if circular.created_at else today
+        
+        # Get all MAPs for this circular
+        circular_maps = [m for m in maps if str(m.circular_id) == str(circular.id)]
+        
+        # Add obligations from the date the circular was created
+        for date in [start_date + timedelta(days=x) for x in range((today - start_date).days + 1)]:
+            if date >= circular_date:
+                date_snapshots[date]["total"] += len(circular_maps)
+                
+                # Count how many were completed by this date
+                for m in circular_maps:
+                    if m.status in ['closed', 'rejected']:
+                        # Determine when this MAP was completed
+                        completion_date = m.updated_at.date() if m.updated_at else today
+                        if date >= completion_date:
+                            date_snapshots[date]["completed"] += 1
+    
+    # Build trend data from snapshots
+    trend_data = []
+    for i, date in enumerate([start_date + timedelta(days=x) for x in range((today - start_date).days + 1)]):
+        snapshot = date_snapshots[date]
+        rate = 0 if snapshot["total"] == 0 else round((snapshot["completed"] / snapshot["total"]) * 100, 1)
+        
+        # Only include every 7th day to avoid cluttering the chart, plus always include today
+        if i % 7 == 0 or date == today:
+            trend_data.append({
+                'week': date.strftime('%b %d'),
+                'rate': rate
+            })
+    
+    # Ensure we have at least the current rate
+    if not trend_data or trend_data[-1]['week'] != today.strftime('%b %d'):
+        trend_data.append({
+            'week': 'Today',
+            'rate': compliance_rate
+        })
     
     # Imminent Actions (First 5 upcoming)
     imminent_actions = []
