@@ -64,6 +64,15 @@ class RoutingAgent:
 
         # --- Step 1: Check Deterministic Guardrail Overrides ---
         guardrail = self.rules_store.find_matching_guardrail(action)
+        if guardrail and guardrail["sub_vertical"] not in self.taxonomy.taxonomy.get(guardrail["department"], {}):
+            # Guardrail points at a (department, sub_vertical) pair that doesn't exist in the
+            # live taxonomy — don't trust it. Fall through to the embedding/LLM pipeline instead.
+            trace["validation_errors"].append(
+                f"Guardrail matched but target pair '{guardrail['department']} » {guardrail['sub_vertical']}' "
+                f"is not a valid taxonomy pair; ignoring guardrail."
+            )
+            guardrail = None
+
         if guardrail:
             trace["guardrail_triggered"] = True
             
@@ -100,16 +109,14 @@ class RoutingAgent:
         
         # Build candidate_taxonomy: format { dept_name: { sub_vertical_name: scope_description } }
         candidate_taxonomy = {}
-        candidate_sv_names = set()
         for sv in candidate_svs:
             dept = sv["department"]
             sv_name = sv["sub_vertical"]
             scope = sv["scope"]
-            
+
             if dept not in candidate_taxonomy:
                 candidate_taxonomy[dept] = {}
             candidate_taxonomy[dept][sv_name] = scope
-            candidate_sv_names.add(sv_name)
 
         # --- Step 3: Retrieve contextually similar active routing rules (few-shots) ---
         if feedback_examples is None:
@@ -144,10 +151,14 @@ class RoutingAgent:
         llm_dept = llm_result.get("department", "Unassigned")
         llm_sv = llm_result.get("sub_vertical")
         
-        # Validate LLM output against candidate set
+        # Validate LLM output against candidate set — the sub-vertical must belong to the
+        # CHOSEN department's own candidate list, not merely appear somewhere in the top-6
+        # (otherwise the LLM can mix-and-match a dept from one row with a sub-vertical from
+        # another, producing structurally invalid pairs like "Risk Management » Third-Party
+        # Risk Management" that don't exist anywhere in the taxonomy).
         is_valid = (
-            llm_dept in candidate_taxonomy and 
-            llm_sv in candidate_sv_names
+            llm_dept in candidate_taxonomy and
+            llm_sv in candidate_taxonomy.get(llm_dept, {})
         )
 
         # --- Step 5: Generative Self-Correction Loop ---
@@ -168,7 +179,7 @@ class RoutingAgent:
             if corrected_result.get("status") == "success":
                 corr_dept = corrected_result.get("department", "Unassigned")
                 corr_sv = corrected_result.get("sub_vertical")
-                if corr_dept in candidate_taxonomy and corr_sv in candidate_sv_names:
+                if corr_dept in candidate_taxonomy and corr_sv in candidate_taxonomy.get(corr_dept, {}):
                     # Self-correction succeeded! Overwrite LLM result.
                     llm_result = corrected_result
                     llm_dept = corr_dept

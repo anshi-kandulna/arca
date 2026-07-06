@@ -38339,11 +38339,6 @@
       "sub_vertical": "Business Continuity & Disaster Recovery"
     },
     {
-      "pattern": "disaster recovery",
-      "department": "IT Vertical",
-      "sub_vertical": "Business Continuity & Disaster Recovery"
-    },
-    {
       "pattern": "cyber crisis management plan",
       "department": "IT Vertical",
       "sub_vertical": "Business Continuity & Disaster Recovery"
@@ -38352,36 +38347,6 @@
       "pattern": "CCMP",
       "department": "IT Vertical",
       "sub_vertical": "Business Continuity & Disaster Recovery"
-    },
-    {
-      "pattern": "recovery time",
-      "department": "IT Vertical",
-      "sub_vertical": "Business Continuity & Disaster Recovery"
-    },
-    {
-      "pattern": "audit log",
-      "department": "Internal Audit",
-      "sub_vertical": "Information Systems Audit"
-    },
-    {
-      "pattern": "forensic readiness",
-      "department": "Internal Audit",
-      "sub_vertical": "Information Systems Audit"
-    },
-    {
-      "pattern": "third-party",
-      "department": "Procurement & Vendor Management",
-      "sub_vertical": "Third-Party Risk Management"
-    },
-    {
-      "pattern": "third party",
-      "department": "Procurement & Vendor Management",
-      "sub_vertical": "Third-Party Risk Management"
-    },
-    {
-      "pattern": "outsourcing",
-      "department": "Procurement & Vendor Management",
-      "sub_vertical": "Third-Party Risk Management"
     },
     {
       "pattern": "place before the board",
