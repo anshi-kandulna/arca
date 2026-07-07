@@ -4,6 +4,8 @@ import re
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from collections import defaultdict
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from sentence_transformers import SentenceTransformer, util
@@ -227,19 +229,22 @@ def overlapAndExtraction(pages, deadline_context):
     Text:
     {text}"""
 
-    all_maps = []
-    failed_pages = []
     sorted_pages = sorted(pages.keys())
-
+    # Pre-build page texts so worker threads only need read-only access
+    page_texts = {
+        page_no: " ".join(item["text"] for item in pages[page_no])
+        for page_no in sorted_pages
+    }
+    print_lock = threading.Lock()
     overall_start = time.time()
-    for i, page_no in enumerate(sorted_pages):
-        page_text = " ".join(item["text"] for item in pages[page_no])
+
+    def _extract_page(i, page_no):
+        page_text = page_texts[page_no]
         if i > 0:
-            prev_text = " ".join(item["text"] for item in pages[sorted_pages[i-1]])
+            prev_text = page_texts[sorted_pages[i - 1]]
             context = prev_text[-200:] + " " + page_text
         else:
             context = page_text
-        print(f"  Processing page {page_no}...")
 
         start = time.time()
         response = ollama.chat(
@@ -253,21 +258,44 @@ def overlapAndExtraction(pages, deadline_context):
             ],
             options={"temperature": 0}
         )
-
         raw = response["message"]["content"].strip()
-
+        elapsed = time.time() - start
         try:
             result = _safe_parse_json(raw)
             maps = result.get("maps", []) if isinstance(result, dict) else []
             for m in maps:
                 m["page_no"] = page_no
-            all_maps.extend(maps)
-            print(f"  page {page_no}: {time.time()-start:.2f}s | maps found: {len(maps)}")
+            with print_lock:
+                print(f"  page {page_no}: {elapsed:.2f}s | maps found: {len(maps)}")
+            return page_no, maps, None
         except (json.JSONDecodeError, Exception) as e:
-            failed_pages.append(page_no)
-            print(f"  page {page_no}: {time.time()-start:.2f}s | JSON parse failed: {e}. Raw: {raw[:200]}")
+            with print_lock:
+                print(f"  page {page_no}: {elapsed:.2f}s | JSON parse failed: {e}. Raw: {raw[:200]}")
+            return page_no, [], page_no  # failed_page
 
-    print("total time for extraction:", time.time()-overall_start)
+    # Parallel extraction — Ollama handles concurrent requests fine for small models
+    results_by_page = {}
+    failed_pages = []
+    MAX_WORKERS = 4  # tune down to 2 on low-RAM machines
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(_extract_page, i, page_no): page_no
+            for i, page_no in enumerate(sorted_pages)
+        }
+        for future in as_completed(futures):
+            page_no, maps, failed = future.result()
+            results_by_page[page_no] = maps
+            if failed:
+                failed_pages.append(failed)
+
+    # Reconstruct in page order
+    all_maps = []
+    for page_no in sorted_pages:
+        all_maps.extend(results_by_page.get(page_no, []))
+
+    print(f"Parallel extraction done in {time.time()-overall_start:.1f}s  "
+          f"({len(all_maps)} MAPs, {len(failed_pages)} failed pages)")
     return all_maps, failed_pages
 
 
@@ -315,7 +343,7 @@ def reconstructingbbox(all_maps, pages):
     return all_maps
 
 
-def resolveDeadlines(all_maps, metadata, deadline_context, batch_size=5):
+def resolveDeadlines(all_maps, metadata, deadline_context, batch_size=20):
     circular_date = metadata.get("circular_date")
 
     RESOLVE_PROMPT = """You are given:
@@ -395,8 +423,6 @@ Return ONLY a JSON array, one entry per obligation, in the same order:
             for m in batch:
                 m["deadline_resolved"] = None
                 m["deadline_reasoning"] = "parse failed"
-
-        time.sleep(1)
 
     print(f"Deadline resolution: {resolved}/{len(all_maps)} resolved in {time.time()-overall_start:.2f}s")
     return all_maps
